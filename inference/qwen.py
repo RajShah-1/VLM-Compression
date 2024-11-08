@@ -8,7 +8,7 @@ from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoPro
 
 # Load the model in half-precision on the available device(s)
 model = Qwen2VLForConditionalGeneration.from_pretrained("ksukrit/qwen2-vl-2b-4bit", device_map="auto")
-processor = AutoProcessor.from_pretrained("ksukrit/qwen2-vl-2b-4bit")
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 
 # Image
 url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg"

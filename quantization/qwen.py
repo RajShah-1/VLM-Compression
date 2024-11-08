@@ -55,18 +55,23 @@ def quantize_model(
             trust_remote_code=True
         )
 
+
         logger.info("Quantization completed successfully")
 
         # Save the quantized model
         logger.info(f"Saving quantized model to {output_dir}")
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
+        logger.info(f"Quantized model footprint is {model.get_memory_footprint()}")
 
         logger.info("Model and tokenizer saved successfully")
 
-        # Free up memory
+            # Free up memory
         del model
         torch.cuda.empty_cache()
+        
+        original_model = Qwen2VLModel.from_pretrained(model_name,config=config)
+        logger.info(f"Original Model footprint is {original_model.get_memory_footprint()}")
 
         return True
 
