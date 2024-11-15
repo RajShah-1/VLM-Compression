@@ -17,6 +17,7 @@ class DocVQA(Benchmark):
     def __init__(self, model : Model):
         self.model = model
         self.processor = model.get_processor()
+        self.model_type = self.model.get_model_name()
         self.cache_dir = os.path.join(setup_cache_dir(), "datasets")
         self.dataset = load_dataset("nielsr/docvqa_1200_examples", split="test", cache_dir=self.cache_dir)
         self.dataset = self.dataset.remove_columns(['id', 'words', 'bounding_boxes', 'answer'])
@@ -24,31 +25,17 @@ class DocVQA(Benchmark):
         self.generated_texts_unique = []
 
     def evaluate(self):
-        EVAL_BATCH_SIZE = 4
+        EVAL_BATCH_SIZE = 1
 
         for i in tqdm(range(0, len(self.dataset), EVAL_BATCH_SIZE)):
             examples = self.dataset[i: i + EVAL_BATCH_SIZE]
             self.answers_unique.extend(examples["answers"])
             images = [[im] for im in examples["image"]]
+            queries = examples["query"]
             print("Images inside is ", images, flush=True)
-            # print("Examples queries are ", examples["query"], flush=True)
-            texts = []
-            for idx, q in enumerate(examples["query"]):
-                print(q)
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "Answer briefly."},
-                            {"type": "image", "image": images[idx][0], "resized_height": 280,"resized_width": 420},
-                            {"type": "text", "text": q["en"]}
-                        ]
-                    }
-                ]
-                
-                texts.append(messages)
-            print(texts)
-            output = self.model.process_generate(texts)
+            
+            output = self.model.process_image_queries(images, queries)
+        
             print("Output is ", output, flush=True)
             print("Expected is ", examples["answers"], flush=True)
             self.generated_texts_unique.extend(output)

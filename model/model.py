@@ -13,3 +13,9 @@ class Model:
 
     def process_generate(self):
         pass
+
+    def get_model_name(self):
+        pass
+
+    def get_model_size(self):
+        return self.model.get_memory_footprint()

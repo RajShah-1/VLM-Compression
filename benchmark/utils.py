@@ -1,6 +1,7 @@
 import Levenshtein
 import os
 
+
 def normalized_levenshtein(s1, s2):
     len_s1, len_s2 = len(s1), len(s2)
     distance = Levenshtein.distance(s1, s2)
