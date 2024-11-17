@@ -4,6 +4,8 @@ from transformers import AutoProcessor, BitsAndBytesConfig, Idefics2ForCondition
 from model.model import Model
 from model.utils import setup_cache_dir
 
+import time
+
 def get_model_tokenizer_processor(quantization_mode):
     model_name = "HuggingFaceM4/idefics2-8b"
 
@@ -50,6 +52,15 @@ def get_model_tokenizer_processor(quantization_mode):
 class Idefics2(Model):
     def __init__(self, quantization_mode):
         self.model, self.tokenizer, self.processor = get_model_tokenizer_processor(quantization_mode)
+        
+        self.quantization_mode = quantization_mode
+        self.num_processed = 0
+        self.total_processing_time = 0
+
+    def get_average_processing_time(self):
+        if self.num_processed == 0:
+            return 0
+        return self.total_processing_time / self.num_processed
 
     def process(self, texts, images):
         inputs = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
@@ -63,9 +74,10 @@ class Idefics2(Model):
         return generated_texts
 
     def get_model_name(self):
-        return "idefics2"
+        return f"idefics2_{self.quantization_mode}bit"
 
     def process_image_queries(self, images, queries):
+        start_time = time.time()
         self.model.eval()
         
         torch.cuda.empty_cache()
@@ -89,38 +101,15 @@ class Idefics2(Model):
         generated_ids = self.model.generate(**inputs, max_new_tokens=64)
         generated_texts = self.processor.batch_decode(generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True)
 
+        end_time = time.time()
+        self.total_processing_time += end_time - start_time
+        self.num_processed += 1
+
         return generated_texts
 
 
     def process_generate(self, original_texts, images):
-        self.model.eval()
-        
-        torch.cuda.empty_cache()
-        
-
-        texts = [
-            self.processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
-            for msg in messages
-        ]
-
-        image_inputs, video_inputs = process_vision_info(messages)
-        inputs = self.processor(
-            text=texts,
-            images=image_inputs,
-            videos=video_inputs,
-            padding=True,
-            return_tensors="pt",
-        )
-
-        inputs = inputs.to("cuda")
-        generated_ids = self.model.generate(**inputs, max_new_tokens=128)
-        generated_ids_trimmed = [
-            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-        ]
-        output_texts = self.processor.batch_decode(
-            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-        )
-        return output_texts
+        pass
 
     def get_processor(self):
         return self.processor

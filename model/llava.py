@@ -4,6 +4,9 @@ from transformers import AutoProcessor, BitsAndBytesConfig, VideoLlavaProcessor,
 from model.model import Model
 from model.utils import setup_cache_dir
 
+import time
+
+
 def get_model_tokenizer_processor(quantization_mode):
     model_name = "LanguageBind/Video-LLaVA-7B-hf"
 
@@ -52,6 +55,15 @@ class VideoLLava(Model):
         self.model, self.tokenizer, self.processor = get_model_tokenizer_processor(quantization_mode)
         self.processor.patch_size = self.model.config.vision_config.patch_size
         self.processor.vision_feature_select_strategy = self.model.config.vision_feature_select_strategy
+        
+        self.quantization_mode = quantization_mode
+        self.num_processed = 0
+        self.total_processing_time = 0
+
+    def get_average_processing_time(self):
+        if self.num_processed == 0:
+            return 0
+        return self.total_processing_time / self.num_processed
 
 
     def process(self, texts, images):
@@ -66,9 +78,10 @@ class VideoLLava(Model):
         return generated_texts
 
     def get_model_name(self):
-        return "video_llava"
+        return f"video_llava_{self.quantization_mode}bit"
 
     def process_image_queries(self, images, queries):
+        start_time = time.time()
         self.model.eval()
         
         torch.cuda.empty_cache()
@@ -86,38 +99,16 @@ class VideoLLava(Model):
         generate_ids = self.model.generate(**inputs, max_new_tokens=128)
         generated_texts = self.processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         generated_texts = [g.split("ASSISTANT:")[1].strip() for g in generated_texts]
+        end_time = time.time()
+
+        self.total_processing_time += (end_time - start_time)
+        self.num_processed += 1
+
         return generated_texts
 
 
     def process_generate(self, original_texts, images):
-        self.model.eval()
-        
-        torch.cuda.empty_cache()
-        
-
-        texts = [
-            self.processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
-            for msg in messages
-        ]
-
-        image_inputs, video_inputs = process_vision_info(messages)
-        inputs = self.processor(
-            text=texts,
-            images=image_inputs,
-            videos=video_inputs,
-            padding=True,
-            return_tensors="pt",
-        )
-
-        inputs = inputs.to("cuda")
-        generated_ids = self.model.generate(**inputs, max_new_tokens=128)
-        generated_ids_trimmed = [
-            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-        ]
-        output_texts = self.processor.batch_decode(
-            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-        )
-        return output_texts
+        pass
 
     def get_processor(self):
         return self.processor

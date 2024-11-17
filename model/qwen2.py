@@ -5,6 +5,8 @@ from qwen_vl_utils import process_vision_info
 from model.model import Model
 from model.utils import setup_cache_dir
 
+import time
+
 def get_model_tokenizer_processor(quantization_mode):
     model_name = "Qwen/Qwen2-VL-2B-Instruct"
 
@@ -59,6 +61,15 @@ def get_model_tokenizer_processor(quantization_mode):
 class Qwen2VL(Model):
     def __init__(self, quantization_mode):
         self.model, self.tokenizer, self.processor = get_model_tokenizer_processor(quantization_mode)
+        
+        self.quantization_mode = quantization_mode
+        self.num_processed = 0
+        self.total_processing_time = 0
+
+    def get_average_processing_time(self):
+        if self.num_processed == 0:
+            return 0
+        return self.total_processing_time / self.num_processed
 
     def process(self, texts, images):
         inputs = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
@@ -66,7 +77,7 @@ class Qwen2VL(Model):
         return outputs
     
     def get_model_name(self):
-        return "qwen2"
+        return f"qwen2_{self.quantization_mode}bit"
 
     def generate(self, texts, images):
         inputs = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
@@ -75,6 +86,7 @@ class Qwen2VL(Model):
         return generated_texts
 
     def process_image_queries(self, images, queries):
+        time_start = time.time()
         messages = []
 
         for idx, q in enumerate(queries):
@@ -91,7 +103,13 @@ class Qwen2VL(Model):
             
             messages.append(message)
         
-        return self.process_generate(messages)
+        output = self.process_generate(messages)
+        time_end = time.time()
+
+        self.total_processing_time += time_end - time_start
+        self.num_processed += 1
+
+        return output
 
 
     def process_generate(self, messages):

@@ -19,3 +19,6 @@ class Model:
 
     def get_model_size(self):
         return self.model.get_memory_footprint()
+    
+    def get_average_processing_time(self):
+        pass

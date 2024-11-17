@@ -8,6 +8,7 @@ from mplug_owl.modeling_mplug_owl import MplugOwlForConditionalGeneration
 from mplug_owl.tokenization_mplug_owl import MplugOwlTokenizer
 from mplug_owl.processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
 
+import time
 
 def get_model_tokenizer_processor(quantization_mode):
     model_name = "MAGAer13/mplug-owl-llama-7b-video"
@@ -57,9 +58,18 @@ def get_model_tokenizer_processor(quantization_mode):
 class Mplug(Model):
     def __init__(self, quantization_mode):
         self.model, self.tokenizer, self.processor = get_model_tokenizer_processor(quantization_mode)
+        
+        self.quantization_mode = quantization_mode
+        self.num_processed = 0
+        self.total_processing_time = 0
+
+    def get_average_processing_time(self):
+        if self.num_processed == 0:
+            return 0
+        return self.total_processing_time / self.num_processed
     
     def get_model_name(self):
-        return "Mplug"
+        return f"Mplug_{self.quantization_mode}bit"
     
     def generate(self, texts, images):
         inputs = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
@@ -69,16 +79,17 @@ class Mplug(Model):
     
     def process_image_queries(self, images, queries):
         torch.cuda.empty_cache()
+        start_time = time.time()
         q = queries[0]
         prompts = [
-        f'''The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
-        Human: <image>
-        Human: {q}
-        AI: '''
-    ]
+            f'''The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+            Human: <image>
+            Human: {q}
+            AI: '''
+        ]
 
-# The image paths should be placed in the image_list and kept in the same order as in the prompts.
-# We support urls, local file paths and base64 string. You can custom the pre-process of images by modifying the mplug_owl.modeling_mplug_owl.ImageProcessor
+        # The image paths should be placed in the image_list and kept in the same order as in the prompts.
+        # We support urls, local file paths and base64 string. You can custom the pre-process of images by modifying the mplug_owl.modeling_mplug_owl.ImageProcessor
         generate_kwargs = {
             'do_sample': True,
             'top_k': 5,
@@ -90,6 +101,11 @@ class Mplug(Model):
         with torch.no_grad():
             res = self.model.generate(**inputs, **generate_kwargs)
         sentence =  self.tokenizer.decode(res.tolist()[0], skip_special_tokens=True)
+        
+        end_time = time.time()
+        self.total_processing_time += end_time - start_time
+        self.num_processed += 1
+
         print(sentence)
         return sentence
 
