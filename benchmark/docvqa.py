@@ -45,4 +45,4 @@ class DocVQA(Benchmark):
         anls = average_normalized_levenshtein_similarity(
             ground_truth=self.answers_unique, predicted_answers=self.generated_texts_unique,
         )
-        print(anls)
+        return anls

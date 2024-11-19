@@ -2,11 +2,18 @@ from model.qwen2 import Qwen2VL
 from model.idefics2 import Idefics2
 from model.phi3 import Phi3_5
 from model.llava import VideoLLava
-from model.mplug import Mplug
 # setup cli args
 import argparse
+import pandas as pd
+
+import os
 
 def main(args):
+    if os.path.exists("results.csv"):
+        df = pd.read_csv("results.csv")
+    else:
+        df = pd.DataFrame(columns=["model_name", "benchmark", "accuracy", "additional_results"])
+
     # Load the model based on the input argument
     if args.model_name == "Qwen/Qwen2-VL-2B-Instruct":
         model = Qwen2VL(quantization_mode=args.quantization_mode)
@@ -36,14 +43,20 @@ def main(args):
 
     # Run the evaluation and display results
     benchmark.evaluate()
-    benchmark.results()
+    result = benchmark.results()
+
+    print(f"Model: {model.get_model_name()}, Benchmark: {args.benchmark_name}, Accuracy: {result}")
+    
+    # Save the results to a CSV file
+    df = pd.concat([df, pd.DataFrame([[model.get_model_name(), args.benchmark_name, result, ""]], columns=df.columns)], ignore_index=True)
+    df.to_csv("results.csv", index=False)
 
 if __name__ == "__main__":
     # Set up command-line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--quantization_mode", type=int, default=4, help="Quantization mode for the model.")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for evaluation.")
-    parser.add_argument("--benchmark_name", type=str, default="scienceqa", help="Benchmark name to run (e.g., scienceqa, vqa2).")
+    parser.add_argument("--benchmark_name", type=str, default="docvqa", help="Benchmark name to run (e.g., scienceqa, vqa2).")
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen2-VL-2B-Instruct", help="Model name to evaluate.")
 
     args = parser.parse_args()
