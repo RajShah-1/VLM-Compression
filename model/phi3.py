@@ -2,7 +2,8 @@ import torch
 from peft import LoraConfig
 from transformers import AutoProcessor, BitsAndBytesConfig, Idefics2ForConditionalGeneration, Qwen2VLModel, Qwen2VLConfig, AutoTokenizer, Qwen2VLForConditionalGeneration,AutoModelForCausalLM
 from model.model import Model
-from model.utils import setup_cache_dir
+from model.utils import setup_cache_dir, extract_frames_video
+import PIL
 
 import time
 
@@ -47,7 +48,7 @@ def get_model_tokenizer_processor(quantization_mode):
             _attn_implementation='eager'    
         )
 
-    processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, num_crops= 16)
+    processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, num_crops= 4)
 
     return model, tokenizer, processor
 
@@ -122,6 +123,46 @@ class Phi3_5(Model):
         
         return generated_texts
 
+    def video_inference(self, video_path, user_query, fps=1.0):
+        self.model.eval()
+        torch.cuda.empty_cache()
+
+        output_dir = "phi3_frames"
+        num_processed = extract_frames_video(video_path, output_dir=output_dir, req_fps=fps)
+
+        images = []
+        placeholder = ""
+
+        for i in range(1,num_processed+1):
+            image_path = f"{output_dir}/frame_{i-1}.jpg"
+            image = PIL.Image.open(image_path)
+            images.append(image)
+            placeholder += f"<|image_{i}|>\n"
+        
+        messages = [
+            {"role": "user", "content": placeholder+"Summarize the following video."},
+        ]
+
+        prompt = self.processor.tokenizer.apply_chat_template(
+            messages, 
+            tokenize=False, 
+            add_generation_prompt=True
+        )
+        
+        inputs = self.processor(prompt, images, return_tensors="pt").to("cuda:0") 
+        generation_args = { 
+            "max_new_tokens": 128, 
+            "temperature": 0.0, 
+            "do_sample": False, 
+        } 
+
+        # inputs = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
+        # inputs = inputs.to("cuda")
+        generated_ids = self.model.generate(**inputs, eos_token_id=self.processor.tokenizer.eos_token_id, **generation_args)
+
+        generated_texts = self.processor.batch_decode(generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True)
+        
+        return generated_texts
 
     def process_generate(self, original_texts, images):
         pass

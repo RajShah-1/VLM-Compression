@@ -1,11 +1,13 @@
 import torch
+import av
 from peft import LoraConfig
 from transformers import AutoProcessor, BitsAndBytesConfig, VideoLlavaProcessor, VideoLlavaForConditionalGeneration, AutoTokenizer
 from model.model import Model
-from model.utils import setup_cache_dir
-
+from model.utils import setup_cache_dir,read_video_pyav
+from huggingface_hub import hf_hub_download
 import time
 
+import numpy as np
 
 def get_model_tokenizer_processor(quantization_mode):
     model_name = "LanguageBind/Video-LLaVA-7B-hf"
@@ -103,6 +105,25 @@ class VideoLLava(Model):
 
         self.total_processing_time += (end_time - start_time)
         self.num_processed += 1
+
+        return generated_texts
+
+
+    def video_inference(self, video_path, user_query, fps=1.0):
+        video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
+        container = av.open(video_path)
+        total_frames = container.streams.video[0].frames
+        indices = np.arange(0, total_frames, total_frames / 8).astype(int)
+
+        clip = read_video_pyav(container=container, indices=indices)
+        prompt = f"USER: <video>\ {user_query} ASSISTANT:"
+
+        inputs = self.processor(text=prompt, videos=clip, return_tensors="pt")
+
+        generate_ids = self.model.generate(**inputs, max_new_tokens=128)
+
+        generated_texts = self.processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        generated_texts = [g.split("ASSISTANT:")[1].strip() for g in generated_texts]
 
         return generated_texts
 
