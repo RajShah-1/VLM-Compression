@@ -20,5 +20,8 @@ class Model:
     def get_model_size(self):
         return self.model.get_memory_footprint()
     
+    def video_inference(self, video_path, user_query, fps=1.0):
+        pass
+    
     def get_average_processing_time(self):
         pass
