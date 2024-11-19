@@ -1,0 +1,3 @@
+model_name,benchmark,accuracy,additional_results
+qwen2_4bit,docvqa,0.1224883881761447,
+qwen2_8bit,docvqa,0.3203984176732342,
