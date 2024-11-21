@@ -1,5 +1,6 @@
 import Levenshtein
 import os
+from evaluate import load
 
 
 def normalized_levenshtein(s1, s2):
@@ -30,3 +31,16 @@ def average_normalized_levenshtein_similarity(ground_truth, predicted_answers):
 
     return total_score / N
 
+def average_bert_score_f1_value(ground_truth, predicted_answers):
+    assert len(ground_truth) == len(predicted_answers), "Length of ground_truth and predicted_answers must match."
+
+    N = len(ground_truth)
+    total_score = 0
+
+    bertscore = load('bertscore')
+
+    results = bertscore.compute(predictions=predicted_answers,references=ground_truth, lang='en', model_type="distilbert-base-uncased")
+
+    avg_f1 = sum(results['f1']) / N
+
+    return avg_f1

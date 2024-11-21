@@ -68,3 +68,5 @@ class ScienceQA:
         
         # Print accuracy
         print(f"Accuracy: {accuracy:.2f}% ({correct}/{total})")
+
+        return accuracy

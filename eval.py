@@ -13,7 +13,7 @@ def main(args):
     if os.path.exists("results.csv"):
         df = pd.read_csv("results.csv")
     else:
-        df = pd.DataFrame(columns=["timestamp", "model_name", "benchmark", "accuracy", "additional_results"])
+        df = pd.DataFrame(columns=["timestamp", "model_name", "benchmark", "accuracy", "memory_utilization", "model_runtime", "additional_results"])
 
     # Load the model based on the input argument
     if args.model_name == "Qwen/Qwen2-VL-2B-Instruct":
@@ -52,7 +52,7 @@ def main(args):
     formatted_timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
     # Save the results to a CSV file
-    df = pd.concat([df, pd.DataFrame([[formatted_timestamp, model.get_model_name(), args.benchmark_name, result, ""]], columns=df.columns)], ignore_index=True)
+    df = pd.concat([df, pd.DataFrame([[formatted_timestamp, model.get_model_name(), args.benchmark_name, result, model.get_model_size(), model.get_average_processing_time() , ""]], columns=df.columns)], ignore_index=True)
     df.to_csv("results.csv", index=False)
 
 if __name__ == "__main__":
