@@ -208,7 +208,17 @@ class CustomQwen2VL(Qwen2VL):
 
     @staticmethod
     def from_path(model_dir, quantization_mode=None):
-        model, tokenizer, processor = get_model_tokenizer_processor(quantization_mode, model_dir)
+        tokenizer = AutoTokenizer.from_pretrained(
+            QWEN2_MODEL_NAME,
+            trust_remote_code=True
+        )
+        processor = AutoProcessor.from_pretrained(QWEN2_MODEL_NAME)
+
+        from low_rank.qwen2_low_rank import LowRankLinear
+        model_path = f"{model_dir}/modified_model.pth"
+        model = torch.load(model_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
+
+
         # Return an instance of CustomQwen2VL
         return CustomQwen2VL(
             quantization_mode=quantization_mode,
