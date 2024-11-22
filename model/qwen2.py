@@ -185,3 +185,16 @@ class Qwen2VL(Model):
 
     def get_processor(self):
         return self.processor
+
+
+class CustomQwen2VL(Qwen2VL):
+    def __init__(self, quantization_mode, model, tokenizer, processor):
+        super().__init__(quantization_mode)
+        
+        # Override the model, tokenizer, and processor
+        self.model = model
+        self.tokenizer = tokenizer
+        self.processor = processor
+
+        if quantization_mode is not None:
+            print('WARNING: CustomQwen2VL ignores the quantization mode. Passed value: ' + str(quantization_mode))

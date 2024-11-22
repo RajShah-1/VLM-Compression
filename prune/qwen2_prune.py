@@ -21,7 +21,6 @@ def create_dataset():
 
     return train_dataset, eval_dataset
 
-
 class MiniDocVQADataCollator:
     def __init__(self, processor):
         self.processor = processor
@@ -70,69 +69,42 @@ class MiniDocVQADataCollator:
         return batch
 
 
-def evaluate_model(model, processor, eval_dataset, output_dir):
-    """Evaluate the model and save results"""
-    print("Starting evaluation...")
-    generated_texts = []
-    answers = []
-    
-    for example in eval_dataset:
-        image = example['image']
-        question = example['query']['en']
-        answers.append(example['answers'])
+def evaluate_model(model):
+    from benchmark.docvqa import DocVQA
+    from datetime import datetime
+    import pandas as pd
 
-        # Create prompt
-        prompt_message = {
-            'role': 'user',
-            'content': f'<|image_1|>\n{question}\nAnswer briefly.',
-        }
-        prompt = processor.tokenizer.apply_chat_template(
-            [prompt_message], tokenize=False, add_generation_prompt=True
-        )
+    benchmark = DocVQA(model)
+    benchmark.evaluate()
+    result = benchmark.results()
 
-        # Prepare inputs
-        inputs = processor(prompt, [image], return_tensors='pt').to("cuda")
-        generated_ids = model.generate(
-            **inputs, eos_token_id=processor.tokenizer.eos_token_id, max_new_tokens=64
-        )
-        generated_text = processor.batch_decode(
-            generated_ids[:, inputs['input_ids'].size(1):],
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False,
-        )[0]
-        generated_texts.append(generated_text)
+    print(f"Model: {model.get_model_name()}, Benchmark: DocVQA, Accuracy: {result}")
+    now = datetime.now()
 
-    # Save evaluation results
-    evaluation_path = os.path.join(output_dir, "evaluation_results.json")
-    with open(evaluation_path, 'w') as f:
-        results = {"answers": answers, "generated_texts": generated_texts}
-        json.dump(results, f, indent=4)
-    
-    print(f"Evaluation results saved to {evaluation_path}")
+    df = pd.DataFrame(columns=["timestamp", "model_name", "benchmark", "accuracy", "memory_utilization", "model_runtime", "additional_results"])
+    formatted_timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+    df = pd.concat([df, pd.DataFrame([[formatted_timestamp, model.get_model_name(), 'DocVQA', result, model.get_model_size(), model.get_average_processing_time() , ""]], columns=df.columns)], ignore_index=True)
+    df.to_csv("results.csv", index=False)
+
 
 def main():
     model_name = "Qwen/Qwen2-VL-2B-Instruct"
     cache_dir = setup_cache_dir()
     output_dir = os.path.join(os.getcwd(), "qwen2_pruned")
 
+    from model.qwen2 import Qwen2VL, CustomQwen2VL
+
     # Load the processor and model
     config = Qwen2VLConfig.from_pretrained(
         model_name,
         trust_remote_code=True
     )
-    processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, cache_dir=cache_dir)
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
-        model_name,
-        config=config,
-        quantization_config=None,
-        device_map="auto",
-        trust_remote_code=True,
-        cache_dir=cache_dir
-    )
+
+    qwen2 = Qwen2VL(quantization_mode=None)
+    model, tokenizer, processor = qwen2.model, qwen2.tokenizer, qwen2.processor
 
     # Prune the model
     num_layers = len(model.model.layers)  # Total number of layers
-    keep_layers = list(range(0, num_layers, 2))  # Keep every alternate layer
     print(f"Original number of layers: {num_layers}")
 
     # Prepare datasets for training
@@ -168,6 +140,7 @@ def main():
         train_dataset=train_dataset,
     )
 
+    # ====
     # Fine-tune the model
     print("\nStarting fine-tuning...\n")
     trainer.train()
@@ -186,8 +159,10 @@ def main():
     print("Saving processor...")
     processor.save_pretrained(output_dir)
     print(f"Processor saved to {output_dir}")
+    # ====
 
-    evaluate_model(model, processor, eval_dataset, output_dir)
+    custom_model = CustomQwen2VL(None, model, tokenizer, processor)
+    evaluate_model(custom_model)
     print("Training and evaluation complete.")
 
 if __name__ == "__main__":
