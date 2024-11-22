@@ -2,7 +2,7 @@ import os
 import torch
 import torch.nn.utils.prune as prune
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoProcessor, Trainer, TrainingArguments, Qwen2VLForConditionalGeneration, Qwen2VLConfig
+from transformers import AutoModelForCausalLM, AutoProcessor, Trainer, TrainingArguments
 from qwen_vl_utils import process_vision_info
 
 from model.utils import setup_cache_dir
@@ -94,18 +94,21 @@ def main():
 
     from model.qwen2 import Qwen2VL, CustomQwen2VL
 
-    # Load the processor and model
-    config = Qwen2VLConfig.from_pretrained(
-        model_name,
-        trust_remote_code=True
-    )
-
     qwen2 = Qwen2VL(quantization_mode=None)
     model, tokenizer, processor = qwen2.model, qwen2.tokenizer, qwen2.processor
 
     # Prune the model
     num_layers = len(model.model.layers)  # Total number of layers
     print(f"Original number of layers: {num_layers}")
+    # Actual pruning code would come here
+    # ===
+    print("Starting structured pruning...")
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Linear):
+            prune.ln_structured(module, name='weight', amount=0.2, n=2, dim=0)
+            prune.remove(module, 'weight')
+    print("Structured pruning completed.")
+    # ===
 
     # Prepare datasets for training
     train_dataset = load_dataset('nielsr/docvqa_1200_examples', split='train', cache_dir=cache_dir)
@@ -140,7 +143,6 @@ def main():
         train_dataset=train_dataset,
     )
 
-    # ====
     # Fine-tune the model
     print("\nStarting fine-tuning...\n")
     trainer.train()
@@ -159,9 +161,10 @@ def main():
     print("Saving processor...")
     processor.save_pretrained(output_dir)
     print(f"Processor saved to {output_dir}")
-    # ====
 
     custom_model = CustomQwen2VL(None, model, tokenizer, processor)
+    # Or custom_model could be loaded as following:
+    # custom_model = CustomQwen2VL.from_path(output_dir)
     evaluate_model(custom_model)
     print("Training and evaluation complete.")
 

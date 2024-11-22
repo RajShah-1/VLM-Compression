@@ -7,8 +7,15 @@ from model.utils import setup_cache_dir
 
 import time
 
-def get_model_tokenizer_processor(quantization_mode):
-    model_name = "Qwen/Qwen2-VL-2B-Instruct"
+QWEN2_MODEL_NAME = "Qwen/Qwen2-VL-2B-Instruct"
+
+def get_model_tokenizer_processor(quantization_mode, model_name):
+    """
+    :param quantization_mode: 4/8/None. If not None, model would be quanitzed to `quantization_mode` bits using bnb
+    :param model_name: Model name or directory path containing the model
+
+    :return: Tuple<Model, Tokenizer, Processor>
+    """
 
     if quantization_mode == 8:
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
@@ -60,7 +67,7 @@ def get_model_tokenizer_processor(quantization_mode):
 
 class Qwen2VL(Model):
     def __init__(self, quantization_mode):
-        self.model, self.tokenizer, self.processor = get_model_tokenizer_processor(quantization_mode)
+        self.model, self.tokenizer, self.processor = get_model_tokenizer_processor(quantization_mode, QWEN2_MODEL_NAME)
         
         self.quantization_mode = quantization_mode
         self.num_processed = 0
@@ -198,3 +205,14 @@ class CustomQwen2VL(Qwen2VL):
 
         if quantization_mode is not None:
             print('WARNING: CustomQwen2VL ignores the quantization mode. Passed value: ' + str(quantization_mode))
+
+    @staticmethod
+    def from_path(model_dir, quantization_mode=None):
+        model, tokenizer, processor = get_model_tokenizer_processor(quantization_mode, model_dir)
+        # Return an instance of CustomQwen2VL
+        return CustomQwen2VL(
+            quantization_mode=quantization_mode,
+            model=model,
+            tokenizer=tokenizer,
+            processor=processor
+        )
