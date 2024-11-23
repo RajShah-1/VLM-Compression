@@ -11,6 +11,60 @@ from model.utils import setup_cache_dir
 import random
 import json
 
+SKIP_LAYERS = ['model.layers.20.mlp.gate_proj',
+'model.layers.20.mlp.up_proj',
+'model.layers.20.mlp.down_proj',
+'model.layers.21.self_attn.q_proj',
+'model.layers.21.self_attn.k_proj',
+'model.layers.21.self_attn.v_proj',
+'model.layers.21.self_attn.o_proj',
+'model.layers.21.mlp.gate_proj',
+'model.layers.21.mlp.up_proj',
+'model.layers.21.mlp.down_proj',
+'model.layers.22.self_attn.q_proj',
+'model.layers.22.self_attn.k_proj',
+'model.layers.22.self_attn.v_proj',
+'model.layers.22.self_attn.o_proj',
+'model.layers.22.mlp.gate_proj',
+'model.layers.22.mlp.up_proj',
+'model.layers.22.mlp.down_proj',
+'model.layers.23.self_attn.q_proj',
+'model.layers.23.self_attn.k_proj',
+'model.layers.23.self_attn.v_proj',
+'model.layers.23.self_attn.o_proj',
+'model.layers.23.mlp.gate_proj',
+'model.layers.23.mlp.up_proj',
+'model.layers.23.mlp.down_proj',
+'model.layers.24.self_attn.q_proj',
+'model.layers.24.self_attn.k_proj',
+'model.layers.24.self_attn.v_proj',
+'model.layers.24.self_attn.o_proj',
+'model.layers.24.mlp.gate_proj',
+'model.layers.24.mlp.up_proj',
+'model.layers.24.mlp.down_proj',
+'model.layers.25.self_attn.q_proj',
+'model.layers.25.self_attn.k_proj',
+'model.layers.25.self_attn.v_proj',
+'model.layers.25.self_attn.o_proj',
+'model.layers.25.mlp.gate_proj',
+'model.layers.25.mlp.up_proj',
+'model.layers.25.mlp.down_proj',
+'model.layers.26.self_attn.q_proj',
+'model.layers.26.self_attn.k_proj',
+'model.layers.26.self_attn.v_proj',
+'model.layers.26.self_attn.o_proj',
+'model.layers.26.mlp.gate_proj',
+'model.layers.26.mlp.up_proj',
+'model.layers.26.mlp.down_proj',
+'model.layers.27.self_attn.q_proj',
+'model.layers.27.self_attn.k_proj',
+'model.layers.27.self_attn.v_proj',
+'model.layers.27.self_attn.o_proj',
+'model.layers.27.mlp.gate_proj',
+'model.layers.27.mlp.up_proj',
+'model.layers.27.mlp.down_proj',
+'lm_head']
+
 class LowRankLinear(nn.Module):
     def __init__(self, in_features, out_features, rank_ratio):
         super(LowRankLinear, self).__init__()
@@ -260,7 +314,7 @@ def main():
     model = replace_linear_with_low_rank(
         model, 
         rank_ratio=0.5,
-        skip_patterns=['embedding', 'final_layer']
+        skip_patterns=SKIP_LAYERS
     )
     
     print("Compressed model size:", get_model_size(model))
