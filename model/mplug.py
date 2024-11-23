@@ -1,20 +1,28 @@
 import torch
+import os 
+import sys
 
 #from mplug_owl_video.modeling_mplug_owl import MplugOwlForConditionalGeneration
 from transformers import AutoTokenizer, BitsAndBytesConfig,  AutoProcessor
 from model.model import Model
 from model.utils import setup_cache_dir
+mplug_owl_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'mPLUG-Owl'))
+sys.path.append(mplug_owl_path)
 from mplug_owl.modeling_mplug_owl import MplugOwlForConditionalGeneration
 from mplug_owl.tokenization_mplug_owl import MplugOwlTokenizer
 from mplug_owl.processing_mplug_owl import MplugOwlImageProcessor, MplugOwlProcessor
+from PIL import Image
 
 import time
 
 def get_model_tokenizer_processor(quantization_mode):
-    model_name = "MAGAer13/mplug-owl-llama-7b-video"
+    model_name = "MAGAer13/mplug-owl-llama-7b"
 
     if quantization_mode == 8:
-        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        quantization_config = BitsAndBytesConfig(
+            load_in_8bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_8bit_use_double_quant=True)
     elif quantization_mode == 4:
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -80,12 +88,13 @@ class Mplug(Model):
     def process_image_queries(self, images, queries):
         torch.cuda.empty_cache()
         start_time = time.time()
+        
         q = queries[0]
         prompts = [
-            f'''The following is a conversation between a curious human and AI assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.
+            f'''The following is a conversation between a curious human and AI assistant. The assistant gives a direct answer in maximum two words to the user's question.
             Human: <image>
-            Human: {q}
-            AI: '''
+            Human: {query}
+            AI: ''' for query in queries
         ]
 
         # The image paths should be placed in the image_list and kept in the same order as in the prompts.
@@ -95,19 +104,25 @@ class Mplug(Model):
             'top_k': 5,
             'max_length': 512
         }
+        images = [img for sublist in images for img in sublist] if any(isinstance(i, list) for i in images) else images
+        images = [Image.open(img) if isinstance(img, str) else img for img in images]
         inputs = self.processor(text=prompts, images=images, return_tensors='pt')
         inputs = {k: v.bfloat16() if v.dtype == torch.float else v for k, v in inputs.items()}
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         with torch.no_grad():
             res = self.model.generate(**inputs, **generate_kwargs)
-        sentence =  self.tokenizer.decode(res.tolist()[0], skip_special_tokens=True)
+        # sentences =  self.tokenizer.decode(res.tolist()[0], skip_special_tokens=True)
+        sentences = self.tokenizer.batch_decode(res, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         
         end_time = time.time()
         self.total_processing_time += end_time - start_time
         self.num_processed += 1
 
-        print(sentence)
-        return sentence
+        # print(sentence)
+        # for query, sentence in zip(queries, sentences):
+        #     print(f"Query: {query}")
+        #     print(f"Response: {sentence}")
+        return sentences
 
 
 
