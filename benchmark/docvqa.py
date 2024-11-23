@@ -9,7 +9,7 @@ from benchmark.benchmark import Benchmark
 from model.utils import setup_cache_dir
 import base64
 from io import BytesIO
-from benchmark.utils import average_normalized_levenshtein_similarity
+from benchmark.utils import average_normalized_levenshtein_similarity, average_bert_score_f1_value
 
 import os
 
@@ -45,4 +45,9 @@ class DocVQA(Benchmark):
         anls = average_normalized_levenshtein_similarity(
             ground_truth=self.answers_unique, predicted_answers=self.generated_texts_unique,
         )
-        return anls
+
+        bert_score_f1 = average_bert_score_f1_value(
+            ground_truth=self.answers_unique, predicted_answers=self.generated_texts_unique,
+        )
+
+        return anls, bert_score_f1

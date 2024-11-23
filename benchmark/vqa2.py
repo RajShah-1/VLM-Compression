@@ -49,4 +49,4 @@ class VQA_v2(Benchmark):
             ground_truth=self.answers_unique, predicted_answers=self.generated_texts_unique,
         )
 
-        return bert_score_f1
+        return bert_score_f1, 0

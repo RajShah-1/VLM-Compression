@@ -2,6 +2,9 @@ from datasets import load_dataset
 from tqdm import tqdm
 import os
 
+from benchmark.utils import average_normalized_levenshtein_similarity, average_bert_score_f1_value
+
+
 class ScienceQA:
     def __init__(self, model):
         self.model = model
@@ -69,4 +72,10 @@ class ScienceQA:
         # Print accuracy
         print(f"Accuracy: {accuracy:.2f}% ({correct}/{total})")
 
-        return accuracy
+        # Calculate BERT score F1
+        bert_score_f1 = average_bert_score_f1_value(
+            ground_truth=self.answers_unique, predicted_answers=self.generated_texts_unique,
+        )
+
+
+        return accuracy, bert_score_f1
