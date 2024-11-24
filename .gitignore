@@ -1,2 +1,13 @@
 model_cache
 __pycache__/
+
+
+# Raj's personal ignores to make git ext work on PACE vscode
+.ipynb_checkpoints/
+.swp
+*.ipynb
+data/
+qwen2_pruned/
+wandb/
+archive/
+qwen2_low_rank/
