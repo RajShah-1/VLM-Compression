@@ -43,7 +43,7 @@ def get_model_tokenizer_processor(quantization_mode):
     else:
         model = VideoLlavaForConditionalGeneration.from_pretrained(
             model_name,
-            device_map="auto",
+            device_map="sequential",
             trust_remote_code=True,
             cache_dir=cache_dir
         )
@@ -65,7 +65,7 @@ class VideoLLava(Model):
     def get_average_processing_time(self):
         if self.num_processed == 0:
             return 0
-        return self.total_processing_time / self.num_processed
+        return self.total_processing_time
 
 
     def process(self, texts, images):
@@ -119,8 +119,9 @@ class VideoLLava(Model):
         prompt = f"USER: <video>\ {user_query} ASSISTANT:"
 
         inputs = self.processor(text=prompt, videos=clip, return_tensors="pt")
-
-        generate_ids = self.model.generate(**inputs, max_new_tokens=128)
+        inputs = inputs.to("cuda")
+        
+        generate_ids = self.model.generate(**inputs, max_new_tokens=512)
 
         generated_texts = self.processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         generated_texts = [g.split("ASSISTANT:")[1].strip() for g in generated_texts]
