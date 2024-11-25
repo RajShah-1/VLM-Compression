@@ -33,7 +33,7 @@ def extract_frames_video(video_path, output_dir, req_fps=1):
     skip_frames = int(fps / req_fps)
 
     # Initialize a counter for the number of frames processed
-    num_frames_processed = 0
+    frames_processed = 0
     # Loop through the video frames
     while cap.isOpened():
         # Read the next frame
@@ -41,9 +41,9 @@ def extract_frames_video(video_path, output_dir, req_fps=1):
         # If the frame was successfully read
         if ret:
             # If the frame number is divisible by the skip_frames value
-            if num_frames_processed % skip_frames == 0:
+            if frames_processed % skip_frames == 0:
                 # Save the frame as an image
-                frame_path = os.path.join(output_dir, f"frame_{num_frames_processed}.jpg")
+                frame_path = os.path.join(output_dir, f"frame_{frames_processed}.jpg")
                 cv2.imwrite(frame_path, frame)
                 # increment the frame counter
                 frames_processed += 1
@@ -52,7 +52,7 @@ def extract_frames_video(video_path, output_dir, req_fps=1):
     return frames_processed
 
 
-def read_video_pyav(container, indices):
+def read_video_pyav(container, indices, save_path = None, save=False):
     '''
     Decode the video with PyAV decoder.
     Args:
@@ -65,9 +65,13 @@ def read_video_pyav(container, indices):
     container.seek(0)
     start_index = indices[0]
     end_index = indices[-1]
+    saved_frame_no = 0
     for i, frame in enumerate(container.decode(video=0)):
         if i > end_index:
             break
         if i >= start_index and i in indices:
             frames.append(frame)
+            if save and save_path is not None:
+                frame.to_image().save(f"{save_path}/frame_{saved_frame_no}.jpg")
+                saved_frame_no += 1
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])

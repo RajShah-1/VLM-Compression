@@ -2,8 +2,11 @@ import torch
 from peft import LoraConfig
 from transformers import AutoProcessor, BitsAndBytesConfig, Idefics2ForConditionalGeneration, Qwen2VLModel, Qwen2VLConfig, AutoTokenizer, Qwen2VLForConditionalGeneration,AutoModelForCausalLM
 from model.model import Model
-from model.utils import setup_cache_dir, extract_frames_video
+from model.utils import setup_cache_dir, extract_frames_video, read_video_pyav
 import PIL
+import av
+
+import numpy as np
 
 import time
 
@@ -63,7 +66,7 @@ class Phi3_5(Model):
     def get_average_processing_time(self):
         if self.num_processed == 0:
             return 0
-        return self.total_processing_time / self.num_processed
+        return self.total_processing_time
 
     def process(self, texts, images):
         inputs = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
@@ -93,6 +96,9 @@ class Phi3_5(Model):
         for idx, q in enumerate(queries):
             if idx > 0:
                 print("Multiple Queries not supported")
+            print(q["en"])
+            if type(q["en"]) == list:
+                q["en"] = q["en"][0]
             messages = [
             {   
                 "role": "user", 
@@ -123,18 +129,27 @@ class Phi3_5(Model):
         
         return generated_texts
 
-    def video_inference(self, video_path, user_query, fps=1.0):
+    def video_inference(self, video_path, user_query, fps=1.0, num_samples=8):
         self.model.eval()
         torch.cuda.empty_cache()
 
         output_dir = "phi3_frames"
-        num_processed = extract_frames_video(video_path, output_dir=output_dir, req_fps=fps)
+        
+        container = av.open(video_path)
+        total_frames = container.streams.video[0].frames
+        indices = np.arange(0, total_frames, total_frames / num_samples).astype(int)
+
+        clip = read_video_pyav(container, indices, output_dir, True)
+        num_processed = len(clip)
+
+        print("Processed {} frames".format(num_processed))
 
         images = []
         placeholder = ""
 
         for i in range(1,num_processed+1):
             image_path = f"{output_dir}/frame_{i-1}.jpg"
+            print("Processing image: ", image_path)
             image = PIL.Image.open(image_path)
             images.append(image)
             placeholder += f"<|image_{i}|>\n"
