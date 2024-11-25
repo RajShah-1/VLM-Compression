@@ -24,8 +24,8 @@ def main(args):
         model = Phi3_5(quantization_mode=args.quantization_mode)
     elif args.model_name == "LanguageBind/Video-LLaVA-7B-hf":
         model = VideoLLava(quantization_mode=args.quantization_mode)
-    elif args.model_name == "LanguageBind/Video-LLaVA-7B-hf":
-        model = VideoLLava(quantization_mode=args.quantization_mode)
+    elif args.model_name == "MAGAer13/mplug-owl-llama-7b-video":
+        model = Mplug(quantization_mode=args.quantization_mode)
     else:
         raise ValueError(f"Model {args.model_name} not supported")
 
