@@ -76,7 +76,7 @@ class Qwen2VL(Model):
     def get_average_processing_time(self):
         if self.num_processed == 0:
             return 0
-        return self.total_processing_time / self.num_processed
+        return self.total_processing_time
 
     def process(self, texts, images):
         inputs = self.processor(text=texts, images=images, return_tensors="pt", padding=True)
