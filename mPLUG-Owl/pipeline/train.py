@@ -1,6 +1,11 @@
 import argparse
 from functools import partial
 
+import os
+import sys
+mplug_owl_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', 'mPLUG-Owl'))
+sys.path.append(mplug_owl_path)
+
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader, Dataset
@@ -15,6 +20,8 @@ from transformers.training_args import TrainingArguments
 from mplug_owl import MplugOwlForConditionalGeneration, MplugOwlTokenizer
 from pipeline.data_utils import train_valid_test_datasets_provider
 from pipeline.utils import batchify, set_args
+
+from typing import Union
 
 
 parser = argparse.ArgumentParser()
@@ -115,7 +122,7 @@ class CustomTrainer(Trainer):
             collate_fn=batchify)
 
 
-    def get_eval_dataloader(self, eval_dataset: Dataset | None = None) -> DataLoader:
+    def get_eval_dataloader(self, eval_dataset: Union[Dataset, None] = None) -> DataLoader:
         dataset = self.eval_dataset
         sampler = DistributedSampler(dataset, shuffle=False)
         return torch.utils.data.DataLoader(
@@ -159,7 +166,8 @@ def main():
                 output.requires_grad_(True)
             model.language_model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
             model.language_model.apply(
-                partial(model.language_model._set_gradient_checkpointing, value=True))
+                # partial(model.language_model._set_gradient_checkpointing, value=True))
+                partial(model.language_model._set_gradient_checkpointing))
 
     else:
         for name, param in model.named_parameters():
@@ -167,9 +175,10 @@ def main():
                 param.requires_grad = True
             else:
                 param.requires_grad = False
-        if args.gradient_checkpointing:
-            model.language_model.apply(
-                partial(model.language_model._set_gradient_checkpointing, value=True))
+        # if args.gradient_checkpointing:
+            # a = partial(model.language_model._set_gradient_checkpointing, value=True)
+            # model.language_model.apply(model.language_model._set_gradient_checkpointing)
+                # partial(model.language_model._set_gradient_checkpointing))
 
     model.train()
 

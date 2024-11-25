@@ -66,7 +66,7 @@ options=" \
 	--bf16"
 
 multimodal_options=" \
-	--mm-config configs/v0.yaml 
+	--mm-config /home/hice1/drauthan3/scratch/BDA_project/mPLUG-Owl/configs/v0.yaml
     "
 
-python -m torch.distributed.launch $DISTRIBUTED_ARGS ./pipeline/train.py $@ ${options} ${multimodal_options} 2>&1 | tee ${SAVE_PATH}/train.log 
+python -m torch.distributed.launch $DISTRIBUTED_ARGS ../pipeline/train.py $@ ${options} ${multimodal_options} 2>&1 | tee ${SAVE_PATH}/train.log 

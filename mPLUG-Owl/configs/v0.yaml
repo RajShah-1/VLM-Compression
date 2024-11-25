@@ -1,6 +1,6 @@
 data_files: [
-    'sft_v0.1_train.jsonl',
-    'sft_v0.1_dev.jsonl'
+    '/home/hice1/drauthan3/scratch/BDA_project/prune/train.jsonl',
+    '/home/hice1/drauthan3/scratch/BDA_project/prune/test.jsonl'
 ]
 
 train_processors: {
