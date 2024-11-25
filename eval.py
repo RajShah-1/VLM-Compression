@@ -2,6 +2,7 @@ from model.qwen2 import Qwen2VL
 from model.idefics2 import Idefics2
 from model.phi3 import Phi3_5
 from model.llava import VideoLLava
+from model.mplug import Mplug
 # setup cli args
 import argparse
 import pandas as pd
