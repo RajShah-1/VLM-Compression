@@ -165,9 +165,12 @@ def main():
             def make_inputs_require_grad(module, input, output):
                 output.requires_grad_(True)
             model.language_model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
-            model.language_model.apply(
-                # partial(model.language_model._set_gradient_checkpointing, value=True))
-                partial(model.language_model._set_gradient_checkpointing))
+            # model.language_model.apply(
+            #     partial(model.language_model._set_gradient_checkpointing, value=True))
+                # partial(model.language_model._set_gradient_checkpointing))
+            modules = list(model.language_model.named_modules())
+            for name, module in modules:
+                model.language_model._set_gradient_checkpointing(module, True)
 
     else:
         for name, param in model.named_parameters():
@@ -175,10 +178,11 @@ def main():
                 param.requires_grad = True
             else:
                 param.requires_grad = False
-        # if args.gradient_checkpointing:
-            # a = partial(model.language_model._set_gradient_checkpointing, value=True)
-            # model.language_model.apply(model.language_model._set_gradient_checkpointing)
-                # partial(model.language_model._set_gradient_checkpointing))
+        if args.gradient_checkpointing:
+            modules = list(model.language_model.named_modules())
+            for name, module in modules:
+                model.language_model._set_gradient_checkpointing(module, True)
+            # model.language_model.apply(partial(model.language_model._set_gradient_checkpointing, True))
 
     model.train()
 

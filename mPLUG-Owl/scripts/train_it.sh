@@ -25,9 +25,9 @@ SAVE_NAME=sft_v0.1_ft_grad_ckpt
 
 SAVE_PATH="./output/${SAVE_NAME}/"
 
-max_length=2048
-micro_batch_size=4
-global_batch_size=256
+max_length=1024
+micro_batch_size=1
+global_batch_size=128
 gradient_accumulation_steps=1
 
 # train_iters = total_data * train_epochs // global_batch_size
@@ -66,7 +66,7 @@ options=" \
 	--bf16"
 
 multimodal_options=" \
-	--mm-config configs/v0.yaml 
+	--mm-config /home/hice1/drauthan3/scratch/BDA_project/mPLUG-Owl/configs/v0.yaml
     "
 
-python -m torch.distributed.launch $DISTRIBUTED_ARGS ./pipeline/train.py $@ ${options} ${multimodal_options} 2>&1 | tee ${SAVE_PATH}/train.log 
+python -m torch.distributed.launch $DISTRIBUTED_ARGS ../pipeline/train.py $@ ${options} ${multimodal_options} 2>&1 | tee ${SAVE_PATH}/train.log 
