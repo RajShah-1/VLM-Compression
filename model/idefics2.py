@@ -132,7 +132,7 @@ class Idefics2(Model):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": f"Given {num_samples} uniformly sampled frames from a video. Answer briefly the user query: {user_query}"},
+                    {"type": "text", "text": f"Given {num_samples} uniformly sampled frames from a video. Answer the user query: {user_query}"},
                 ]
             }
         ]
