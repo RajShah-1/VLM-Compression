@@ -10,7 +10,6 @@ from model.utils import setup_cache_dir
 import random
 import json
 
-
 SYSTEM_MESSAGE = """You are a Vision Language Model specialized in interpreting visual data from chart images.
 Your task is to analyze the provided chart image and respond to queries with concise answers, usually a single word, number, or short phrase.
 The charts include a variety of types (e.g., line charts, bar charts) and contain colors, labels, and text.
@@ -23,10 +22,10 @@ def format_data(sample):
     answer = random.choice(sample["answers"])
 
     return [
-        {
-            "role": "system",
-            "content": [{"type": "text", "text": SYSTEM_MESSAGE}],
-        },
+        # {
+        #     "role": "system",
+        #     "content": [{"type": "text", "text": SYSTEM_MESSAGE}],
+        # },
         {
             "role": "user",
             "content": [
@@ -168,6 +167,9 @@ def main():
     # ===
 
     # Prepare datasets for training
+
+    # dataset_id = "HuggingFaceM4/ChartQA"
+    # train_dataset, eval_dataset, test_dataset = load_dataset(dataset_id, split=["train[:10%]", "val[:10%]", "test[:10%]"], cache_dir=cache_dir)
     train_dataset = load_dataset('nielsr/docvqa_1200_examples', split='train', cache_dir=cache_dir)
     eval_dataset = load_dataset('nielsr/docvqa_1200_examples', split='test', cache_dir=cache_dir)
 
@@ -196,8 +198,8 @@ def main():
     print(f"Resuming training from step {start_step}..." if latest_checkpoint else "Starting training from scratch...")
 
     training_args = TrainingArguments(
-        num_train_epochs=2,
-        per_device_train_batch_size=1,
+        num_train_epochs=5,
+        per_device_train_batch_size=3,
         gradient_checkpointing=True,
         optim='adamw_bnb_8bit',
         learning_rate=4e-5,
