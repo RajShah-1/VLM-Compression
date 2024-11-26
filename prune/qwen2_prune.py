@@ -2,13 +2,51 @@ import os
 import torch
 import torch.nn.utils.prune as prune
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoProcessor, Trainer, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoProcessor, Trainer, TrainingArguments, Qwen2VLProcessor
 from qwen_vl_utils import process_vision_info
 
 from model.utils import setup_cache_dir
 
 import random
 import json
+
+
+SYSTEM_MESSAGE = """You are a Vision Language Model specialized in interpreting visual data from chart images.
+Your task is to analyze the provided chart image and respond to queries with concise answers, usually a single word, number, or short phrase.
+The charts include a variety of types (e.g., line charts, bar charts) and contain colors, labels, and text.
+Focus on delivering accurate, succinct answers based on the visual information. Avoid additional explanation unless absolutely necessary."""
+
+
+def format_data(sample):
+    image = sample["image"]
+    query = sample["query"]
+    answer = random.choice(sample["answers"])
+
+    return [
+        {
+            "role": "system",
+            "content": [{"type": "text", "text": SYSTEM_MESSAGE}],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": image,
+                    "min_pixels": 256*28*28,
+                    "max_pixels": 256*28*28
+                },
+                {
+                    "type": "text",
+                    "text": query,
+                },
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": answer}],
+        },
+    ]
 
 # Function to create the dataset
 def create_dataset():
@@ -26,48 +64,39 @@ class MiniDocVQADataCollator:
         self.processor = processor
 
     def __call__(self, examples):
-        assert len(examples) == 1, 'Batch size must be 1!'
-        example = examples[0]
+        processor = self.processor
 
-        image = example['image']
-        question = example['query']['en']
-        answer = random.choice(example['answers'])
-        prompt_message = {
-            'role': 'user',
-            'content': f'<|image_1|>\n{question}\nAnswer briefly.',
-        }
+        # Apply chat template
+        texts = [
+            processor.apply_chat_template(example, tokenize=False) for example in examples
+        ]
+
+         # Process the images to extract inputs
+        image_inputs = [process_vision_info(example)[0] for example in examples]
         
-        # Qwen specific step
-        image_inputs, video_inputs = process_vision_info([prompt_message])
-
-        prompt = self.processor.tokenizer.apply_chat_template(
-            [prompt_message], tokenize=False, add_generation_prompt=True
-        )
-        answer = f'{answer}<|end|>\n<|endoftext|>'
-
-        # Process input and labels
-        batch = self.processor(text=prompt, images=image_inputs, videos=video_inputs, return_tensors='pt', padding=True)
-        prompt_input_ids = batch['input_ids']
-        answer_input_ids = self.processor.tokenizer(
-            answer, add_special_tokens=False, return_tensors='pt'
-        )['input_ids']
-        input_ids = torch.cat([prompt_input_ids, answer_input_ids], dim=1)
-
-        ignore_index = -100
-        labels = torch.cat(
-            [
-                torch.tensor([ignore_index] * len(prompt_input_ids[0])).unsqueeze(0),
-                answer_input_ids,
-            ],
-            dim=1,
+        # Tokenize the texts and process the images
+        batch = processor(
+            text=texts, images=image_inputs, return_tensors="pt", padding=True
         )
 
-        batch['input_ids'] = input_ids
-        del batch['attention_mask']
-        batch['labels'] = labels
+        # Mask padding tokens
+        labels = batch["input_ids"].clone()
+        labels[labels == processor.tokenizer.pad_token_id] = -100
+
+        # Ignore the image token index in the loss computation (model specific)
+        if isinstance(processor, Qwen2VLProcessor):
+            image_tokens = [151652, 151653, 151655]  # Specific image token IDs for Qwen2VLProcessor
+        else:
+            # Convert image token to ID
+            image_tokens = [processor.tokenizer.convert_tokens_to_ids(processor.image_token)]
+
+        # Mask image token IDs in the labels
+        for image_token_id in image_tokens:
+            labels[labels == image_token_id] = -100
+
+        batch["labels"] = labels
 
         return batch
-
 
 def evaluate_model(model):
     from benchmark.docvqa import DocVQA
@@ -87,6 +116,30 @@ def evaluate_model(model):
     df.to_csv("results.csv", index=False)
 
 
+def prune_model_layers(model, keep_layers):
+    """
+    Prune transformer layers in the model.
+    
+    Args:
+        model: The transformer model.
+        keep_layers: List of layer indices to keep.
+        
+    Returns:
+        The pruned model.
+    """
+    # Access the model's layers
+    transformer_layers = model.model.layers
+
+    # Prune layers
+    pruned_layers = torch.nn.ModuleList(
+        [transformer_layers[i] for i in keep_layers]
+    )
+    
+    # Replace the model's layers with pruned layers
+    model.model.layers = pruned_layers
+
+    return model
+
 def main():
     model_name = "Qwen/Qwen2-VL-2B-Instruct"
     cache_dir = setup_cache_dir()
@@ -100,26 +153,53 @@ def main():
     # Prune the model
     num_layers = len(model.model.layers)  # Total number of layers
     print(f"Original number of layers: {num_layers}")
+
     # Actual pruning code would come here
     # ===
+    num_layers = len(model.model.layers)  # Total number of layers
+    keep_layers = list(range(0, num_layers, 2))  # Keep every alternate layer
     print("Starting structured pruning...")
-    for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Linear):
-            prune.ln_structured(module, name='weight', amount=0.2, n=2, dim=0)
-            prune.remove(module, 'weight')
-    print("Structured pruning completed.")
+    model = prune_model_layers(model, keep_layers)
+    # for name, module in model.named_modules():
+    #     if isinstance(module, torch.nn.Linear):
+    #         prune.ln_structured(module, name='weight', amount=0.2, n=2, dim=0)
+    #         prune.remove(module, 'weight')
+    print(f"Pruned number of layers: {len(model.model.layers)}")
     # ===
 
     # Prepare datasets for training
     train_dataset = load_dataset('nielsr/docvqa_1200_examples', split='train', cache_dir=cache_dir)
     eval_dataset = load_dataset('nielsr/docvqa_1200_examples', split='test', cache_dir=cache_dir)
 
-    # Define training arguments
+    train_dataset = [format_data(example) for example in train_dataset]
+    eval_dataset = [format_data(example) for example in eval_dataset]
+
+    # Recover from the latest checkpoint
+    def find_latest_checkpoint(output_dir):
+        """Find the latest checkpoint in the output directory."""
+        checkpoints = [
+            os.path.join(output_dir, d) for d in os.listdir(output_dir)
+            if d.startswith("checkpoint-") and os.path.isdir(os.path.join(output_dir, d))
+        ]
+        if not checkpoints:
+            return None
+        # Sort by step number and get the latest
+        latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[-1]))
+        return latest_checkpoint
+
+
+    latest_checkpoint = find_latest_checkpoint(output_dir)
+    start_step = None
+    if latest_checkpoint is not None:
+        start_step = int(latest_checkpoint.split("-")[-1]) if latest_checkpoint else 0
+
+    print(f"Resuming training from step {start_step}..." if latest_checkpoint else "Starting training from scratch...")
+
     training_args = TrainingArguments(
         num_train_epochs=2,
         per_device_train_batch_size=1,
         gradient_checkpointing=True,
-        optim='adamw_torch',
+        optim='adamw_bnb_8bit',
         learning_rate=4e-5,
         weight_decay=0.01,
         max_grad_norm=1.0,
@@ -129,9 +209,11 @@ def main():
         output_dir=output_dir,
         bf16=True,
         remove_unused_columns=False,
-        dataloader_num_workers=4,
-        dataloader_prefetch_factor=2,
-        save_strategy="no",
+        dataloader_num_workers=1,
+        dataloader_prefetch_factor=1,
+        save_strategy="steps",
+        save_steps=200,  # Save checkpoint every 200 steps
+        save_total_limit=2,  # Keep only the last 2 checkpoints to save space
     )
 
     data_collator = MiniDocVQADataCollator(processor)
