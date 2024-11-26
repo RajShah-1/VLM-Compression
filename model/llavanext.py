@@ -1,13 +1,15 @@
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration, AutoTokenizer
+from transformers import LlavaNextVideoProcessor, LlavaNextVideoForConditionalGeneration, AutoTokenizer, BitsAndBytesConfig
 import torch
 from PIL import Image
 import requests
 from model.model import Model
 from model.utils import setup_cache_dir,read_video_pyav
 import time
+import av
+import numpy as np
 
 def get_model_tokenizer_processor(quantization_mode):
-    model_name = "llava-hf/llava-v1.6-mistral-7b-hf"
+    model_name = "llava-hf/LLaVA-NeXT-Video-7B-hf"
 
     if quantization_mode == 8:
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
@@ -30,7 +32,7 @@ def get_model_tokenizer_processor(quantization_mode):
     cache_dir = setup_cache_dir()
 
     if quantization_config is not None:
-        model = LlavaNextForConditionalGeneration.from_pretrained(
+        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             model_name,
             quantization_config=quantization_config,
             device_map="auto",
@@ -38,14 +40,14 @@ def get_model_tokenizer_processor(quantization_mode):
             cache_dir=cache_dir
         )
     else:
-        model = LlavaNextForConditionalGeneration.from_pretrained(
+        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             model_name,
             device_map="auto",
             trust_remote_code=True,
             cache_dir=cache_dir
         )
     
-    processor = LlavaNextProcessor.from_pretrained(model_name)
+    processor = LlavaNextVideoProcessor.from_pretrained(model_name)
 
     return model, tokenizer, processor
 
@@ -111,4 +113,30 @@ class LlavaNext(Model):
 
     def get_processor(self):
         return self.processor
+    
+    def video_inference(self, video_path, user_query, fps=1.0):
+        torch.cuda.empty_cache()
         
+        container = av.open(video_path)
+        total_frames = container.streams.video[0].frames
+        indices = np.arange(0, total_frames, total_frames / 8).astype(int)
+        video = read_video_pyav(container, indices)
+        
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"{user_query}"},
+                    {"type": "video"},
+                    ],
+            },
+        ]
+        
+        prompt = self.processor.apply_chat_template(conversation, add_generation_prompt=True)
+        inputs = self.processor(text=prompt, videos=video, return_tensors="pt")
+        inputs = inputs.to("cuda")
+
+        generated_ids = self.model.generate(**inputs, max_new_tokens=256)
+        output_text = self.processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        
+        return [text.split("ASSISTANT: ", 1)[1] for text in output_text]

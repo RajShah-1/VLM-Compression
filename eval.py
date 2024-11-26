@@ -25,7 +25,7 @@ def main(args):
         model = Phi3_5(quantization_mode=args.quantization_mode)
     elif args.model_name == "LanguageBind/Video-LLaVA-7B-hf":
         model = VideoLLava(quantization_mode=args.quantization_mode)
-    elif args.model_name == "llava-hf/llava-v1.6-mistral-7b-hf":
+    elif args.model_name == "llava-hf/LLaVA-NeXT-Video-7B-hf":
         model = LlavaNext(quantization_mode=args.quantization_mode)
     else:
         raise ValueError(f"Model {args.model_name} not supported")

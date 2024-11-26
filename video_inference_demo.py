@@ -2,6 +2,7 @@ from model.qwen2 import Qwen2VL
 from model.idefics2 import Idefics2
 from model.phi3 import Phi3_5
 from model.llava import VideoLLava
+from model.llavanext import LlavaNext
 
 import argparse
 import pandas as pd
@@ -17,6 +18,8 @@ def main(args):
         model = Qwen2VL(quantization_mode=args.quantization_mode)
     elif args.model_name == "microsoft/Phi-3.5-vision-instruct":
         model = Phi3_5(quantization_mode=args.quantization_mode)
+    elif args.model_name == "llava-hf/LLaVA-NeXT-Video-7B-hf":
+        model = LlavaNext(quantization_mode=args.quantization_mode)
     return model.video_inference(video_path="demo_video/sample_demo_1.mp4", user_query="What is happening in the video")
 
 
