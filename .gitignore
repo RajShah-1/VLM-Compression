@@ -11,3 +11,7 @@ qwen2_pruned/
 wandb/
 archive/
 qwen2_low_rank/
+
+# 
+qwen2_vl_model
+mlx_model

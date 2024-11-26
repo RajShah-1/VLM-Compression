@@ -22,7 +22,6 @@ def extract_frames_video(video_path, output_dir, req_fps=1):
     Extract frames from a video and save them as individual images.
     """
     # Create the output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
     # Create a VideoCapture object to read the video
     cap = cv2.VideoCapture(video_path)
     # Get the video's frame rate
@@ -66,6 +65,10 @@ def read_video_pyav(container, indices, save_path = None, save=False):
     start_index = indices[0]
     end_index = indices[-1]
     saved_frame_no = 0
+    
+    if save_path is not None:
+        os.makedirs(save_path, exist_ok=True)
+
     for i, frame in enumerate(container.decode(video=0)):
         if i > end_index:
             break
