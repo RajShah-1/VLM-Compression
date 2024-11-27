@@ -11,6 +11,7 @@ qwen2_pruned/
 wandb/
 archive/
 qwen2_low_rank/
+logs/
 
 # 
 qwen2_vl_model

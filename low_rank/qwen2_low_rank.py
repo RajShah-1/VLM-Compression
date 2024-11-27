@@ -211,17 +211,11 @@ def replace_linear_with_low_rank(model, retained_variance, skip_patterns=None):
     
     return model
 
-
-SYSTEM_MESSAGE = """You are a Vision Language Model specialized in interpreting visual data from chart images.
-Your task is to analyze the provided chart image and respond to queries with concise answers, usually a single word, number, or short phrase.
-The charts include a variety of types (e.g., line charts, bar charts) and contain colors, labels, and text.
-Focus on delivering accurate, succinct answers based on the visual information. Avoid additional explanation unless absolutely necessary."""
-
-
 def format_data(sample):
     image = sample["image"]
-    query = sample["query"]
-    answer = random.choice(sample["answers"])
+    # query = sample["query"]
+    query = "What is happening in the image"
+    answer = random.choice(sample["caption"])
 
     return [
         # {
@@ -252,15 +246,15 @@ def format_data(sample):
 # Function to create the dataset
 def create_dataset():
     cache_dir = setup_cache_dir()
-    train_dataset = load_dataset('nielsr/docvqa_1200_examples', split='train')
-    train_dataset = train_dataset.remove_columns(['id', 'words', 'bounding_boxes', 'answer'])
 
-    eval_dataset = load_dataset('nielsr/docvqa_1200_examples', split='test')
-    eval_dataset = eval_dataset.remove_columns(['id', 'words', 'bounding_boxes', 'answer'])
-
+    dataset = load_dataset("nlphuji/flickr30k", split="test", cache_dir=cache_dir)
+    dataset = dataset.remove_columns(['sentids', 'split', 'img_id', 'filename'])
+    split_dataset = dataset.train_test_split(test_size=0.2, seed=42)
+    train_dataset = split_dataset['train']
+    eval_dataset = split_dataset['test']
     return train_dataset, eval_dataset
 
-class MiniDocVQADataCollator:
+class DataCollator:
     def __init__(self, processor):
         self.processor = processor
 
@@ -301,10 +295,11 @@ class MiniDocVQADataCollator:
 
 def evaluate_model(model):
     from benchmark.docvqa import DocVQA
+    from benchmark.flickr30k import Flickr30k
     from datetime import datetime
     import pandas as pd
 
-    benchmark = DocVQA(model)
+    benchmark = Flickr30k(model)
     benchmark.evaluate()
     result = benchmark.results()
 
@@ -370,23 +365,45 @@ def main():
     print("Original model size:", get_model_size(model))
     model = replace_linear_with_low_rank(
         model, 
-        retained_variance=0.95,
+        retained_variance=0.80,
         skip_patterns=SKIP_LAYERS
     )
     print("Compressed model size:", get_model_size(model))
     # ===
 
     # Prepare datasets for training
-
-    # dataset_id = "HuggingFaceM4/ChartQA"
-    # train_dataset, eval_dataset, test_dataset = load_dataset(dataset_id, split=["train[:10%]", "val[:10%]", "test[:10%]"], cache_dir=cache_dir)
+    print('Creating dataset splits')
     train_dataset, eval_dataset = create_dataset()
 
     train_dataset = [format_data(example) for example in train_dataset]
     eval_dataset = [format_data(example) for example in eval_dataset]
+    print('Created dataset splits')
+
+    # Recover from the latest checkpoint~
+    def find_latest_checkpoint(output_dir):
+        """Find the latest checkpoint in the output directory."""
+        print(os.listdir(output_dir))
+        checkpoints = [
+            os.path.join(output_dir, d) for d in os.listdir(output_dir)
+            if d.startswith("checkpoint-") and os.path.isdir(os.path.join(output_dir, d))
+        ]
+        print('Candidate checkpoints', checkpoints)
+        if not checkpoints:
+            return None
+        # Sort by step number and get the latest
+        latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[-1]))
+        return latest_checkpoint
+
+
+    latest_checkpoint = find_latest_checkpoint(output_dir)
+    start_step = None
+    if latest_checkpoint is not None:
+        start_step = int(latest_checkpoint.split("-")[-1]) if latest_checkpoint else 0
+
+    print(f"Resuming training from step {start_step}..." if latest_checkpoint else "Starting training from scratch...")
 
     training_args = TrainingArguments(
-        num_train_epochs=2,
+        num_train_epochs=1,
         per_device_train_batch_size=3,
         gradient_checkpointing=True,
         optim='adamw_bnb_8bit',
@@ -401,10 +418,13 @@ def main():
         remove_unused_columns=False,
         dataloader_num_workers=1,
         dataloader_prefetch_factor=1,
-        save_strategy="steps"
+        save_strategy="steps",
+        save_steps=200,  # Save checkpoint every 200 steps
+        save_total_limit=2,  # Keep only the last 2 checkpoints to save space
     )
+    os.makedirs(output_dir, exist_ok=True)
 
-    data_collator = MiniDocVQADataCollator(processor)
+    data_collator = DataCollator(processor)
 
     trainer = Trainer(
         model=model,
@@ -416,10 +436,9 @@ def main():
 
     # Fine-tune the model
     print("\nStarting fine-tuning...\n")
-    trainer.train()
+    trainer.train(resume_from_checkpoint=latest_checkpoint)
     print("\nFine-tuning completed.")
 
-    os.makedirs(output_dir, exist_ok=True)
 
     print("Saving model with device_map='auto' for offloading...")
     model.save_pretrained(output_dir, safe_serialization=False, max_shard_size="500MB", device_map="auto")
@@ -433,15 +452,18 @@ def main():
     processor.save_pretrained(output_dir)
     print(f"Processor saved to {output_dir}")
 
-    print("\nStarting evaluation on eval dataset...")
-    metrics = trainer.evaluate()
-    print("\nEvaluation metrics:")
-    for key, value in metrics.items():
-        print(f"{key}: {value}")
-    print("Training and evaluation complete.")
+    pytorch_model_path = os.path.join(output_dir, "pytorch_model.pt")
+    torch.save(model.state_dict(), pytorch_model_path)
+
+    # print("\nStarting evaluation on eval dataset...")
+    # metrics = trainer.evaluate()
+    # print("\nEvaluation metrics:")
+    # for key, value in metrics.items():
+    #     print(f"{key}: {value}")
+    # print("Training and evaluation complete.")
 
     custom_model = CustomQwen2VL(None, model, tokenizer, processor)
-    # Or custom_model could be loaded as following:
+    # # Or custom_model could be loaded as following:
     # custom_model = CustomQwen2VL.from_path(output_dir)
     evaluate_model(custom_model)
 

@@ -217,6 +217,7 @@ def main():
         save_steps=200,  # Save checkpoint every 200 steps
         save_total_limit=2,  # Keep only the last 2 checkpoints to save space
     )
+    os.makedirs(output_dir, exist_ok=True)
 
     data_collator = MiniDocVQADataCollator(processor)
 
@@ -232,7 +233,6 @@ def main():
     trainer.train()
     print("\nFine-tuning completed.")
 
-    os.makedirs(output_dir, exist_ok=True)
 
     print("Saving model with device_map='auto' for offloading...")
     model.save_pretrained(output_dir, safe_serialization=False, max_shard_size="500MB", device_map="auto")

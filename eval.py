@@ -2,7 +2,7 @@ from model.qwen2 import Qwen2VL
 from model.idefics2 import Idefics2
 from model.phi3 import Phi3_5
 from model.llava import VideoLLava
-from model.mplug import Mplug
+
 # setup cli args
 import argparse
 import pandas as pd
@@ -26,6 +26,7 @@ def main(args):
     elif args.model_name == "LanguageBind/Video-LLaVA-7B-hf":
         model = VideoLLava(quantization_mode=args.quantization_mode)
     elif args.model_name == "MAGAer13/mplug-owl-llama-7b-video":
+        from model.mplug import Mplug
         model = Mplug(quantization_mode=args.quantization_mode)
     else:
         raise ValueError(f"Model {args.model_name} not supported")
@@ -49,6 +50,9 @@ def main(args):
     elif args.benchmark_name == "scienceqa_demo":
         from benchmark.scienceqa_demo import ScienceQA_DEMO
         benchmark = ScienceQA_DEMO(model)
+    elif args.benchmark_name == 'flickr30k':
+        from benchmark.flickr30k import Flickr30k
+        benchmark = Flickr30k(model)
     else:
         raise ValueError(f"Benchmark {args.benchmark_name} not supported")
 

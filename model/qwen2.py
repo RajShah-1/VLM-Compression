@@ -215,7 +215,7 @@ class CustomQwen2VL(Qwen2VL):
         processor = AutoProcessor.from_pretrained(QWEN2_MODEL_NAME)
 
         from low_rank.qwen2_low_rank import LowRankLinear
-        model_path = f"{model_dir}/modified_model.pth"
+        model_path = f"{model_dir}/pytorch_model.pt"
         model = torch.load(model_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
 
 
