@@ -40,6 +40,15 @@ def main(args):
     elif args.benchmark_name == "scienceqa":
         from benchmark.scienceqa import ScienceQA
         benchmark = ScienceQA(model)
+    elif args.benchmark_name == "docvqa_demo":
+        from benchmark.docvqa_demo import DocVQA_DEMO
+        benchmark = DocVQA_DEMO(model)
+    elif args.benchmark_name == "vqa2_demo":
+        from benchmark.vqa2_demo import VQA_v2_DEMO
+        benchmark = VQA_v2_DEMO(model)
+    elif args.benchmark_name == "scienceqa_demo":
+        from benchmark.scienceqa_demo import ScienceQA_DEMO
+        benchmark = ScienceQA_DEMO(model)
     else:
         raise ValueError(f"Benchmark {args.benchmark_name} not supported")
 
