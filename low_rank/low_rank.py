@@ -197,9 +197,9 @@ def patch_model_using_metadata(model, metadata, pt_model_path=None):
             low_rank_layer = LowRankLinear(in_features, out_features, rank)
             setattr(parent_module, components[-1], low_rank_layer)
 
-    # if pt_model_path is not None:
-    #     state_dict = torch.load(pt_model_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
-    #     model.load_state_dict(state_dict)
-    #     print('Loaded model weight')
+    if pt_model_path is not None:
+        state_dict = torch.load(pt_model_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
+        model.load_state_dict(state_dict)
+        print('Loaded model weight')
 
     return model
