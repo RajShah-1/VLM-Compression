@@ -248,7 +248,6 @@ def main():
 
     custom_model = CustomQwen2VL(None, model, tokenizer, processor)
     # Or custom_model could be loaded as following:
-    # custom_model = CustomQwen2VL.from_path(output_dir)
     evaluate_model(custom_model)
     print("Training and evaluation complete.")
 

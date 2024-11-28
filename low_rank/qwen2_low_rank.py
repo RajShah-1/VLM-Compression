@@ -11,205 +11,60 @@ from model.utils import setup_cache_dir
 import random
 import json
 
-
-SKIP_LAYERS = ['model.layers.20.mlp.gate_proj',
-'model.layers.20.mlp.up_proj',
-'model.layers.20.mlp.down_proj',
-'model.layers.21.self_attn.q_proj',
-'model.layers.21.self_attn.k_proj',
-'model.layers.21.self_attn.v_proj',
-'model.layers.21.self_attn.o_proj',
-'model.layers.21.mlp.gate_proj',
-'model.layers.21.mlp.up_proj',
-'model.layers.21.mlp.down_proj',
-'model.layers.22.self_attn.q_proj',
-'model.layers.22.self_attn.k_proj',
-'model.layers.22.self_attn.v_proj',
-'model.layers.22.self_attn.o_proj',
-'model.layers.22.mlp.gate_proj',
-'model.layers.22.mlp.up_proj',
-'model.layers.22.mlp.down_proj',
-'model.layers.23.self_attn.q_proj',
-'model.layers.23.self_attn.k_proj',
-'model.layers.23.self_attn.v_proj',
-'model.layers.23.self_attn.o_proj',
-'model.layers.23.mlp.gate_proj',
-'model.layers.23.mlp.up_proj',
-'model.layers.23.mlp.down_proj',
-'model.layers.24.self_attn.q_proj',
-'model.layers.24.self_attn.k_proj',
-'model.layers.24.self_attn.v_proj',
-'model.layers.24.self_attn.o_proj',
-'model.layers.24.mlp.gate_proj',
-'model.layers.24.mlp.up_proj',
-'model.layers.24.mlp.down_proj',
-'model.layers.25.self_attn.q_proj',
-'model.layers.25.self_attn.k_proj',
-'model.layers.25.self_attn.v_proj',
-'model.layers.25.self_attn.o_proj',
-'model.layers.25.mlp.gate_proj',
-'model.layers.25.mlp.up_proj',
-'model.layers.25.mlp.down_proj',
-'model.layers.26.self_attn.q_proj',
-'model.layers.26.self_attn.k_proj',
-'model.layers.26.self_attn.v_proj',
-'model.layers.26.self_attn.o_proj',
-'model.layers.26.mlp.gate_proj',
-'model.layers.26.mlp.up_proj',
-'model.layers.26.mlp.down_proj',
-'model.layers.27.self_attn.q_proj',
-'model.layers.27.self_attn.k_proj',
-'model.layers.27.self_attn.v_proj',
-'model.layers.27.self_attn.o_proj',
-'model.layers.27.mlp.gate_proj',
-'model.layers.27.mlp.up_proj',
-'model.layers.27.mlp.down_proj',
-'lm_head']
-
-class LowRankLinear(nn.Module):
-    def __init__(self, in_features, out_features, rank):
-        super(LowRankLinear, self).__init__()
-        self.rank = max(1, rank)
-        print('init with rank', self.rank)
-        self.in_features = in_features
-        self.out_features = out_features
-        
-        self.linear1 = nn.Linear(in_features, self.rank, bias=False)
-        self.linear2 = nn.Linear(self.rank, out_features, bias=True)
-
-    def forward(self, x):
-        x = self.linear1(x)
-        x = self.linear2(x)
-        return x
-
-    @property
-    def weight(self):
-        # Mimic the weight attribute by combining the two linear layers
-        # FIXME Come up with a better way to handle this
-        return self.linear2.weight.data @ self.linear1.weight.data
-    
-    @classmethod
-    def from_linear(cls, linear_layer, retained_variance):
-        """
-        Initialize from an existing nn.Linear layer using SVD decomposition
-        with proper dimension handling
-        """
-        device = linear_layer.weight.device
-        in_features = linear_layer.in_features
-        out_features = linear_layer.out_features
-        # Init low rank layers using SVD
-        with torch.no_grad():
-            try:
-                U, S, V = torch.svd(linear_layer.weight.data)
-                total_variance = torch.sum(S ** 2)
-                cumulative_variance = torch.cumsum(S ** 2, dim=0)
-                rank = torch.searchsorted(cumulative_variance, retained_variance * total_variance).item()
-                # Ensure minimum rank of 1
-                # init instance
-                instance = cls(in_features, out_features, rank)
-                instance = instance.to(device)
-                rank = instance.rank
-            
-                # Expected dimensions:
-                # linear1.weight -> (rank, in_features)
-                # linear2.weight -> (out_features, rank)
-                sqrt_s = torch.sqrt(S[:rank]).view(-1, 1)
-                instance.linear1.weight.data = (V[:, :rank] * sqrt_s.T).T
-                instance.linear2.weight.data = U[:, :rank] * sqrt_s.T
-                
-                # Handle bias at 2nd layer
-                if linear_layer.bias is not None:
-                    instance.linear2.bias.data.copy_(linear_layer.bias.data)
-                    
-                # Sanity check
-                assert instance.linear1.weight.shape == (rank, in_features), \
-                    f"Linear1 weight shape mismatch: got {instance.linear1.weight.shape}, expected {(rank, in_features)}"
-                assert instance.linear2.weight.shape == (out_features, rank), \
-                    f"Linear2 weight shape mismatch: got {instance.linear2.weight.shape}, expected {(out_features, rank)}"
-                
-            except Exception as e:
-                raise RuntimeError(f"SVD initialization failed: {str(e)}\n"
-                                 f"Shapes: weight={linear_layer.weight.shape}, "
-                                 f"U={U.shape}, S={S.shape}, V={V.shape}, "
-                                 f"rank={rank}")
-            
-        return instance
-    
-    def get_compression_stats(self):
-        """
-        Return compression statistics
-        """
-        original_params   = self.in_features * self.out_features + self.out_features
-        compressed_params = (self.in_features * self.rank +    # first layer weights
-                             self.rank * self.out_features +   # second layer weights
-                             self.out_features)                # bias
-        
-        stats = {
-            'original_params': original_params,
-            'compressed_params': compressed_params,
-            'compression_ratio': compressed_params / original_params,
-            'rank': self.rank,
-        }
-        return stats
-
-def replace_linear_with_low_rank(model, retained_variance, skip_patterns=None):
-    """
-    Replace linear layers with low-rank versions initialized using SVD
-    """
-    if skip_patterns is None:
-        skip_patterns = []
-        
-    replacements = 0
-    total_params_before = 0
-    total_params_after = 0
-    
-    for name, module in model.named_modules():
-        if any(pattern in name for pattern in skip_patterns):
-            continue
-            
-        if isinstance(module, nn.Linear):
-            try:
-                print(f"\nProcessing layer {name}")
-                print(f"Original shape: {module.weight.shape}")
-                
-                low_rank_module = LowRankLinear.from_linear(module, retained_variance)                
-                print(f"Low rank shapes: {low_rank_module.linear1.weight.shape} -> {low_rank_module.linear2.weight.shape}")
-                
-                # Compression stats
-                stats = low_rank_module.get_compression_stats()
-                total_params_before += stats['original_params']
-                total_params_after += stats['compressed_params']
-                
-                # Replace the module
-                parent_module = model
-                components = name.split('.')
-                for comp in components[:-1]:
-                    parent_module = getattr(parent_module, comp)
-                setattr(parent_module, components[-1], low_rank_module)
-                
-                replacements += 1
-                
-                # Print retained variance
-                with torch.no_grad():
-                    U, S, V = torch.svd(module.weight.data)
-                    rank = low_rank_module.rank
-                    total_variance = torch.sum(S ** 2)
-                    module_retained_var = torch.sum(S[:rank] ** 2)
-                    variance_ratio = module_retained_var / total_variance
-                    print(f"Layer {name}: Retaining {variance_ratio:.2%} of variance")
-                    
-            except Exception as e:
-                print(f"Warning: Could not replace layer {name}: {e}")
-                continue
-            
-    compression_ratio = total_params_after / total_params_before
-    print(f"\nSummary:")
-    print(f"Replaced {replacements} linear layers")
-    print(f"Parameters before: {total_params_before:,}")
-    print(f"Parameters after: {total_params_after:,}")
-    print(f"Compression ratio: {compression_ratio:.2%}")
-    
-    return model
+def get_skip_layers():
+    return ['model.layers.20.mlp.gate_proj',
+    'model.layers.20.mlp.up_proj',
+    'model.layers.20.mlp.down_proj',
+    'model.layers.21.self_attn.q_proj',
+    'model.layers.21.self_attn.k_proj',
+    'model.layers.21.self_attn.v_proj',
+    'model.layers.21.self_attn.o_proj',
+    'model.layers.21.mlp.gate_proj',
+    'model.layers.21.mlp.up_proj',
+    'model.layers.21.mlp.down_proj',
+    'model.layers.22.self_attn.q_proj',
+    'model.layers.22.self_attn.k_proj',
+    'model.layers.22.self_attn.v_proj',
+    'model.layers.22.self_attn.o_proj',
+    'model.layers.22.mlp.gate_proj',
+    'model.layers.22.mlp.up_proj',
+    'model.layers.22.mlp.down_proj',
+    'model.layers.23.self_attn.q_proj',
+    'model.layers.23.self_attn.k_proj',
+    'model.layers.23.self_attn.v_proj',
+    'model.layers.23.self_attn.o_proj',
+    'model.layers.23.mlp.gate_proj',
+    'model.layers.23.mlp.up_proj',
+    'model.layers.23.mlp.down_proj',
+    'model.layers.24.self_attn.q_proj',
+    'model.layers.24.self_attn.k_proj',
+    'model.layers.24.self_attn.v_proj',
+    'model.layers.24.self_attn.o_proj',
+    'model.layers.24.mlp.gate_proj',
+    'model.layers.24.mlp.up_proj',
+    'model.layers.24.mlp.down_proj',
+    'model.layers.25.self_attn.q_proj',
+    'model.layers.25.self_attn.k_proj',
+    'model.layers.25.self_attn.v_proj',
+    'model.layers.25.self_attn.o_proj',
+    'model.layers.25.mlp.gate_proj',
+    'model.layers.25.mlp.up_proj',
+    'model.layers.25.mlp.down_proj',
+    'model.layers.26.self_attn.q_proj',
+    'model.layers.26.self_attn.k_proj',
+    'model.layers.26.self_attn.v_proj',
+    'model.layers.26.self_attn.o_proj',
+    'model.layers.26.mlp.gate_proj',
+    'model.layers.26.mlp.up_proj',
+    'model.layers.26.mlp.down_proj',
+    'model.layers.27.self_attn.q_proj',
+    'model.layers.27.self_attn.k_proj',
+    'model.layers.27.self_attn.v_proj',
+    'model.layers.27.self_attn.o_proj',
+    'model.layers.27.mlp.gate_proj',
+    'model.layers.27.mlp.up_proj',
+    'model.layers.27.mlp.down_proj',
+    'lm_head']
 
 def format_data(sample):
     image = sample["image"]
@@ -352,6 +207,7 @@ def main():
     output_dir = os.path.join(os.getcwd(), "qwen2_low_rank")
 
     from model.qwen2 import Qwen2VL, CustomQwen2VL
+    from low_rank import patch_model_using_metadata, save_metadata, get_metadata, replace_linear_with_low_rank
 
     qwen2 = Qwen2VL(quantization_mode=None)
     model, tokenizer, processor = qwen2.model, qwen2.tokenizer, qwen2.processor
@@ -366,105 +222,112 @@ def main():
     model = replace_linear_with_low_rank(
         model, 
         retained_variance=0.80,
-        skip_patterns=SKIP_LAYERS
+        skip_patterns=get_skip_layers()
     )
     print("Compressed model size:", get_model_size(model))
+
+    metadata_json = os.path.join(output_dir, "metadata.json")
+    save_metadata(metadata_json)
+
+    print("Saved metadata for low rank factorization")
     # ===
 
-    # Prepare datasets for training
-    print('Creating dataset splits')
-    train_dataset, eval_dataset = create_dataset()
+    # # Prepare datasets for training
+    # print('Creating dataset splits')
+    # train_dataset, eval_dataset = create_dataset()
 
-    train_dataset = [format_data(example) for example in train_dataset]
-    eval_dataset = [format_data(example) for example in eval_dataset]
-    print('Created dataset splits')
+    # train_dataset = [format_data(example) for example in train_dataset]
+    # eval_dataset = [format_data(example) for example in eval_dataset]
+    # print('Created dataset splits')
 
-    # Recover from the latest checkpoint~
-    def find_latest_checkpoint(output_dir):
-        """Find the latest checkpoint in the output directory."""
-        print(os.listdir(output_dir))
-        checkpoints = [
-            os.path.join(output_dir, d) for d in os.listdir(output_dir)
-            if d.startswith("checkpoint-") and os.path.isdir(os.path.join(output_dir, d))
-        ]
-        print('Candidate checkpoints', checkpoints)
-        if not checkpoints:
-            return None
-        # Sort by step number and get the latest
-        latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[-1]))
-        return latest_checkpoint
-
-
-    latest_checkpoint = find_latest_checkpoint(output_dir)
-    start_step = None
-    if latest_checkpoint is not None:
-        start_step = int(latest_checkpoint.split("-")[-1]) if latest_checkpoint else 0
-
-    print(f"Resuming training from step {start_step}..." if latest_checkpoint else "Starting training from scratch...")
-
-    training_args = TrainingArguments(
-        num_train_epochs=1,
-        per_device_train_batch_size=3,
-        gradient_checkpointing=True,
-        optim='adamw_bnb_8bit',
-        learning_rate=4e-5,
-        weight_decay=0.01,
-        max_grad_norm=1.0,
-        lr_scheduler_type='linear',
-        warmup_steps=50,
-        logging_steps=10,
-        output_dir=output_dir,
-        bf16=True,
-        remove_unused_columns=False,
-        dataloader_num_workers=1,
-        dataloader_prefetch_factor=1,
-        save_strategy="steps",
-        save_steps=200,  # Save checkpoint every 200 steps
-        save_total_limit=2,  # Keep only the last 2 checkpoints to save space
-    )
-    os.makedirs(output_dir, exist_ok=True)
-
-    data_collator = DataCollator(processor)
-
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        data_collator=data_collator,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-    )
-
-    # Fine-tune the model
-    print("\nStarting fine-tuning...\n")
-    trainer.train(resume_from_checkpoint=latest_checkpoint)
-    print("\nFine-tuning completed.")
+    # # Recover from the latest checkpoint~
+    # def find_latest_checkpoint(output_dir):
+    #     """Find the latest checkpoint in the output directory."""
+    #     print(os.listdir(output_dir))
+    #     checkpoints = [
+    #         os.path.join(output_dir, d) for d in os.listdir(output_dir)
+    #         if d.startswith("checkpoint-") and os.path.isdir(os.path.join(output_dir, d))
+    #     ]
+    #     print('Candidate checkpoints', checkpoints)
+    #     if not checkpoints:
+    #         return None
+    #     # Sort by step number and get the latest
+    #     latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[-1]))
+    #     return latest_checkpoint
 
 
-    print("Saving model with device_map='auto' for offloading...")
-    model.save_pretrained(output_dir, safe_serialization=False, max_shard_size="500MB", device_map="auto")
-    print("Model saved successfully.")
+    # latest_checkpoint = find_latest_checkpoint(output_dir)
+    # start_step = None
+    # if latest_checkpoint is not None:
+    #     start_step = int(latest_checkpoint.split("-")[-1]) if latest_checkpoint else 0
 
-    print("Saving processor")
-    if not hasattr(processor, 'chat_template'):
-        processor.chat_template = None
+    # print(f"Resuming training from step {start_step}..." if latest_checkpoint else "Starting training from scratch...")
 
-    print("Saving processor...")
-    processor.save_pretrained(output_dir)
-    print(f"Processor saved to {output_dir}")
+    # training_args = TrainingArguments(
+    #     num_train_epochs=1,
+    #     per_device_train_batch_size=3,
+    #     gradient_checkpointing=True,
+    #     optim='adamw_bnb_8bit',
+    #     learning_rate=4e-5,
+    #     weight_decay=0.01,
+    #     max_grad_norm=1.0,
+    #     lr_scheduler_type='linear',
+    #     warmup_steps=50,
+    #     logging_steps=10,
+    #     output_dir=output_dir,
+    #     bf16=True,
+    #     remove_unused_columns=False,
+    #     dataloader_num_workers=1,
+    #     dataloader_prefetch_factor=1,
+    #     save_strategy="steps",
+    #     save_steps=200,  # Save checkpoint every 200 steps
+    #     save_total_limit=2,  # Keep only the last 2 checkpoints to save space
+    # )
+    # os.makedirs(output_dir, exist_ok=True)
 
-    pytorch_model_path = os.path.join(output_dir, "pytorch_model.pt")
-    torch.save(model.state_dict(), pytorch_model_path)
+    # data_collator = DataCollator(processor)
 
-    # print("\nStarting evaluation on eval dataset...")
-    # metrics = trainer.evaluate()
-    # print("\nEvaluation metrics:")
-    # for key, value in metrics.items():
-    #     print(f"{key}: {value}")
-    # print("Training and evaluation complete.")
+    # trainer = Trainer(
+    #     model=model,
+    #     args=training_args,
+    #     data_collator=data_collator,
+    #     train_dataset=train_dataset,
+    #     eval_dataset=eval_dataset,
+    # )
+
+    # # Fine-tune the model
+    # print("\nStarting fine-tuning...\n")
+    # trainer.train(resume_from_checkpoint=latest_checkpoint)
+    # print("\nFine-tuning completed.")
+
+
+    # print("Saving model with device_map='auto' for offloading...")
+    # model.save_pretrained(output_dir, safe_serialization=False, max_shard_size="500MB", device_map="auto")
+    # print("Model saved successfully.")
+
+    # print("Saving processor")
+    # if not hasattr(processor, 'chat_template'):
+    #     processor.chat_template = None
+
+    # print("Saving processor...")
+    # processor.save_pretrained(output_dir)
+    # print(f"Processor saved to {output_dir}")
+
+    # pytorch_model_path = os.path.join(output_dir, "pytorch_model.pt")
+    # torch.save(model.state_dict(), pytorch_model_path)
+
+    # # print("\nStarting evaluation on eval dataset...")
+    # # metrics = trainer.evaluate()
+    # # print("\nEvaluation metrics:")
+    # # for key, value in metrics.items():
+    # #     print(f"{key}: {value}")
+    # # print("Training and evaluation complete.")
 
     custom_model = CustomQwen2VL(None, model, tokenizer, processor)
+
+    weights_path = os.path.join(output_dir, "pytorch_model.pt")
+    custom_model.model = patch_model_using_metadata(custom_model.model, get_metadata(), weights_path)
     # # Or custom_model could be loaded as following:
-    # custom_model = CustomQwen2VL.from_path(output_dir)
     evaluate_model(custom_model)
 
 if __name__ == "__main__":

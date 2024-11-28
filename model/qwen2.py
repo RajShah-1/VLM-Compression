@@ -66,8 +66,13 @@ def get_model_tokenizer_processor(quantization_mode, model_name):
     return model, tokenizer, processor
 
 class Qwen2VL(Model):
-    def __init__(self, quantization_mode):
-        self.model, self.tokenizer, self.processor = get_model_tokenizer_processor(quantization_mode, QWEN2_MODEL_NAME)
+    def __init__(self, quantization_mode, from_child=False):
+
+        if not from_child:
+            self.model, self.tokenizer, self.processor = get_model_tokenizer_processor(quantization_mode, QWEN2_MODEL_NAME)
+        else:
+            # Child class is supposed to init all of the following.
+            self.model = self.tokenizer = self.processor = None
         
         self.quantization_mode = quantization_mode
         self.num_processed = 0
@@ -196,7 +201,7 @@ class Qwen2VL(Model):
 
 class CustomQwen2VL(Qwen2VL):
     def __init__(self, quantization_mode, model, tokenizer, processor):
-        super().__init__(quantization_mode)
+        super().__init__(quantization_mode, from_child=True)
         
         # Override the model, tokenizer, and processor
         self.model = model
@@ -207,21 +212,35 @@ class CustomQwen2VL(Qwen2VL):
             print('WARNING: CustomQwen2VL ignores the quantization mode. Passed value: ' + str(quantization_mode))
 
     @staticmethod
-    def from_path(model_dir, quantization_mode=None):
+    def from_low_rank_path(metadata_path, pt_model_path):
+        from low_rank.low_rank import patch_model_using_metadata, read_metadata
         tokenizer = AutoTokenizer.from_pretrained(
             QWEN2_MODEL_NAME,
             trust_remote_code=True
         )
         processor = AutoProcessor.from_pretrained(QWEN2_MODEL_NAME)
 
-        from low_rank.qwen2_low_rank import LowRankLinear
-        model_path = f"{model_dir}/pytorch_model.pt"
-        model = torch.load(model_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
+        from low_rank.low_rank import LowRankLinear
+        from low_rank.low_rank import replace_linear_with_low_rank
 
+        cache_dir = setup_cache_dir()
+        config = Qwen2VLConfig.from_pretrained(
+            QWEN2_MODEL_NAME,
+            trust_remote_code=True
+        )
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            QWEN2_MODEL_NAME,
+            config=config,
+            device_map="auto",
+            trust_remote_code=True,
+            cache_dir=cache_dir
+        )
+
+        model = patch_model_using_metadata(model, read_metadata(metadata_path), pt_model_path)
 
         # Return an instance of CustomQwen2VL
         return CustomQwen2VL(
-            quantization_mode=quantization_mode,
+            quantization_mode=None,
             model=model,
             tokenizer=tokenizer,
             processor=processor
