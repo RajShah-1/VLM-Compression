@@ -51,12 +51,23 @@ class ScienceQA:
             # Store generated texts
             self.generated_texts_unique.extend(outputs)
     def _format_question(self, example):
-            """Format question with options"""
-            question = example.get("question", "")
-            for i, choice in enumerate(example.get("choices", [])):
-                question += f"\n{chr(ord('A') + i)}. {choice}"
-            question += "\nPlease answer directly with only the letter of the correct option."
-            return question
+        """Format question with choices and additional context."""
+        question_text = example.get("question", [""])[0]  # Extract the first question if it's a list
+        choices = example.get("choices", [[]])[0]  # Extract the first set of choices
+        hint = example.get("hint", [""])[0]  # Use the first hint, if available
+
+        # Build the question text
+        formatted_question = f"Question: {question_text}\n\n"
+        formatted_question += "Choices:\n"
+        for i, choice in enumerate(choices):
+            formatted_question += f"{chr(ord('A') + i)}. {choice}\n"
+
+        # Include the hint if available
+        if hint:
+            formatted_question += f"\nHint: {hint}\n"
+
+        formatted_question += "\nPlease answer directly with only the letter of the correct option."
+        return formatted_question
 
     def results(self):
         # Clean outputs for comparison
