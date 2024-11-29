@@ -14,7 +14,7 @@ class ScienceQA_DEMO:
         self.dataset = load_dataset("derek-thomas/ScienceQA", split="test", cache_dir=self.cache_dir)
 
         # Load only the first `num_examples` examples
-        self.dataset = self.dataset.select(range(min(20, len(self.dataset))))
+        self.dataset = self.dataset.select(range(min(16, len(self.dataset))))
 
         self.answers_unique = []
         self.generated_texts_unique = []
@@ -39,7 +39,8 @@ class ScienceQA_DEMO:
                 if not valid_examples:
                     # Skip if no valid examples
                     continue
-
+                #for example in valid_examples:
+                #    print(example)
                 # Process valid examples
                 self.answers_unique.extend([
                     chr(ord('A') + int(example["answer"][0])) for example in valid_examples
@@ -74,12 +75,23 @@ class ScienceQA_DEMO:
                     f.write("-" * 50 + "\n")
 
     def _format_question(self, example):
-        """Format question with options"""
-        question = example.get("question", "")
-        for i, choice in enumerate(example.get("choices", [])):
-            question += f"\n{chr(ord('A') + i)}. {choice}"
-        question += "\nPlease answer directly with only the letter of the correct option."
-        return question
+        """Format question with choices and additional context."""
+        question_text = example.get("question", [""])[0]  # Extract the first question if it's a list
+        choices = example.get("choices", [[]])[0]  # Extract the first set of choices
+        hint = example.get("hint", [""])[0]  # Use the first hint, if available
+
+        # Build the question text
+        formatted_question = f"Question: {question_text}\n\n"
+        formatted_question += "Choices:\n"
+        for i, choice in enumerate(choices):
+            formatted_question += f"{chr(ord('A') + i)}. {choice}\n"
+
+        # Include the hint if available
+        if hint:
+            formatted_question += f"\nHint: {hint}\n"
+
+        formatted_question += "\nPlease answer directly with only the letter of the correct option."
+        return formatted_question
 
     def results(self):
         # Clean outputs for comparison
