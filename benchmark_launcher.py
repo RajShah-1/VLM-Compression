@@ -15,11 +15,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    for benchmark in benchmarks:
-        for model in models:
-            for quantization_mode in quantization_modes:
+    for model in models:
+        for quantization_mode in quantization_modes:
+            for benchmark in benchmarks:
+                print("Running benchmark {} for model {} with quantization mode {}".format(benchmark, model, quantization_mode))
                 args.model_name = model
                 args.quantization_mode = quantization_mode
                 args.benchmark_name = benchmark
                 main(args)
-    
