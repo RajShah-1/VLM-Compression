@@ -6,7 +6,7 @@ import numpy as np
 
 def setup_cache_dir():
     """Setup local cache directories for model and data"""
-    cache_dir = '/storage/ice1/8/3/rshah647/BDANew/BDA_project/model_cache'
+    cache_dir = os.path.join(os.getcwd(), "model_cache")
     os.makedirs(cache_dir, exist_ok=True)
     
     # Set HuggingFace cache directory
