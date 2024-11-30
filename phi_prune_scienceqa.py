@@ -29,9 +29,7 @@ def is_valid_example(example):
     """Check if an example is valid."""
     # Example must have an image and at least one non-empty choice
     return (
-        example.get("image") and example["image"][0] is not None
-        and "choices" in example
-        and example.get("choices", [[]])[0]
+        example.get("image") is not None
     )
 
 def load_and_split_scienceqa():
@@ -63,9 +61,15 @@ class VQA2DataCollator:
 
     def _format_question(self, example):
         """Format question with choices and additional context."""
-        question_text = example.get("question", [""])[0]  # Extract the first question if it's a list
-        choices = example.get("choices", [[]])[0]  # Extract the first set of choices
-        hint = example.get("hint", [""])[0]  # Use the first hint, if available
+        question_text = example.get("question", [""])[0]  # Extract the first   question if it's a list
+        choices = example.get("choices", [[]])[0]  # Extract the first set of   choices
+        hint = example.get("hint", None)  # Get the hint, if available
+
+        # Ensure `hint` is valid and non-empty
+        if isinstance(hint, list) and len(hint) > 0:
+            hint = hint[0]
+        else:
+            hint = ""  # Default to an empty string if no valid hint is present
 
         # Build the question text
         formatted_question = f"Question: {question_text}\n\n"
@@ -77,14 +81,15 @@ class VQA2DataCollator:
         if hint:
             formatted_question += f"\nHint: {hint}\n"
 
-        formatted_question += "\nPlease answer directly with only the letter of the correct option."
+        formatted_question += "\nPlease answer directly with only the letter of the     correct option."
         return formatted_question
 
     def __call__(self, examples):
         assert len(examples) == 1, 'Batch size must be 1 for Phi-3-V models'
+        #print(examples[0])
         images = [example["image"] for example in examples]
         questions = self._format_question(examples[0])
-        answer = examples["multiple_choice_answer"]
+        answer = examples[0]["answer"]
 
 
         prompt_message = {
@@ -94,10 +99,10 @@ class VQA2DataCollator:
         prompt = self.processor.tokenizer.apply_chat_template(
             [prompt_message], tokenize=False, add_generation_prompt=True
         )
-        answer = chr(ord('A') + int(examples[0]["answer"][0]))
+        answer = chr(ord('A') + int(examples[0]["answer"]))
 
 
-        batch = self.processor(prompt, [images], return_tensors="pt", padding=True, truncation=True)
+        batch = self.processor(prompt, images, return_tensors="pt", padding=True, truncation=True)
         prompt_input_ids = batch['input_ids']
         answer_input_ids = self.processor.tokenizer(
             answer, add_special_tokens=False, return_tensors='pt'
@@ -134,20 +139,17 @@ class VQA_v2_Evaluator:
 
         time_start = time.time()
 
-        images = images[0][0]
+        images = images[0]
         
         texts = []
         placeholder = f"<|image_1|>\n"
         for idx, q in enumerate(queries):
             if idx > 0:
                 print("Multiple Queries not supported")
-            print(q["en"])
-            if type(q["en"]) == list:
-                q["en"] = q["en"][0]
             messages = [
             {   
                 "role": "user", 
-                "content": "Answer in one word." + placeholder+ " " + q["en"]},
+                "content": "Answer in one word." + placeholder+ " " + q},
             ]
 
         prompt = self.processor.tokenizer.apply_chat_template(
@@ -157,7 +159,7 @@ class VQA_v2_Evaluator:
         )
         inputs = self.processor(prompt, images, return_tensors="pt").to("cuda:0") 
         generation_args = { 
-            "max_new_tokens": 128, 
+            "max_new_tokens": 512, 
             "temperature": 0.0, 
             "do_sample": False, 
         } 
@@ -169,16 +171,21 @@ class VQA_v2_Evaluator:
         generated_texts = self.processor.batch_decode(generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True)
         time_end = time.time()
 
-        self.total_processing_time += time_end - time_start
-        self.num_processed += 1
         
         return generated_texts
     
     def _format_question(self, example):
         """Format question with choices and additional context."""
-        question_text = example.get("question", [""])[0]  # Extract the first question if it's a list
-        choices = example.get("choices", [[]])[0]  # Extract the first set of choices
-        hint = example.get("hint", [""])[0]  # Use the first hint, if available
+        print(example)
+        question_text = example.get("question", [""])[0]  # Extract the first   question if it's a list
+        choices = example.get("choices", [[]])[0]  # Extract the first set of   choices
+        hint = example.get("hint", None)  # Get the hint, if available
+
+        # Ensure `hint` is valid and non-empty
+        if isinstance(hint, list) and len(hint) > 0:
+            hint = hint[0]
+        else:
+            hint = ""  # Default to an empty string if no valid hint is present
 
         # Build the question text
         formatted_question = f"Question: {question_text}\n\n"
@@ -190,16 +197,16 @@ class VQA_v2_Evaluator:
         if hint:
             formatted_question += f"\nHint: {hint}\n"
 
-        formatted_question += "\nPlease answer directly with only the letter of the correct option."
+        formatted_question += "\nPlease answer directly with only the letter of the     correct option."
         return formatted_question
     def evaluate(self):
         print("Evaluating model on test dataset...")
         for example in tqdm(self.test_dataset):
             images = [example["image"]]
             questions = [self._format_question(example)]
-            self.answers_unique.append(chr(ord('A') + int(example["answer"][0])))
+            self.answers_unique.append(chr(ord('A') + int(example["answer"])))
             generated_text = self.process_image_queries(images, questions)
-            self.generated_texts_unique.append(generated_text)
+            self.generated_texts_unique.extend(generated_text)
 
     def results(self):
         self.generated_texts_unique = [g.strip().strip(".") for g in self.generated_texts_unique]
@@ -231,6 +238,7 @@ def main():
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         cache_dir=cache_dir,
+        _attn_implementation="eager",
     ).to("cuda")
 
     # Define training arguments
@@ -270,9 +278,13 @@ def main():
     fine_tuning_time = time.time() - start_time
     print(f"Fine-tuning completed in {fine_tuning_time:.2f} seconds.")
 
-    # Save model and processor
-    model.save_pretrained(output_dir, safe_serialization=False, max_shard_size="500MB", device_map="auto")
-    processor.save_pretrained(output_dir)
+    print("Saving model...")
+    model.save_pretrained(output_dir, safe_serialization=False,     max_shard_size="500MB", device_map="auto")
+    print("Model saved successfully.")
+    print("Saving processor...")
+    # Ensure `chat_template` attribute is defined before saving
+    if not hasattr(processor, 'chat_template'):
+        processor.chat_template = None
 
     # Evaluate
     evaluator = VQA_v2_Evaluator(model, processor, test_dataset)
@@ -283,7 +295,7 @@ def main():
 
     # Results
     evaluator.results()
-    print(f"Fine-tuning time: {fine_tuning_time:.2f} seconds, Evaluation time: {evaluation_time:.2f} seconds.")
+    # print(f"Fine-tuning time: {fine_tuning_time:.2f} seconds, Evaluation time: {evaluation_time:.2f} seconds.")
 
 
 if __name__ == "__main__":
