@@ -28,13 +28,8 @@ def setup_cache_dir():
 def is_valid_example(example):
     """Check if an example is valid."""
     # Example must have an image and at least one non-empty choice
-    print(example  )
-    if example["image"] is None:
-        return False
     return (
-        example["image"] and example["image"] is not None
-        and "choices" in example
-        and example.get("choices", [[]])[0]
+        example.get("image") is not None
     )
 
 def load_and_split_scienceqa():
@@ -66,9 +61,15 @@ class VQA2DataCollator:
 
     def _format_question(self, example):
         """Format question with choices and additional context."""
-        question_text = example.get("question", [""])[0]  # Extract the first question if it's a list
-        choices = example.get("choices", [[]])[0]  # Extract the first set of choices
-        hint = example.get("hint", "")  # Use the first hint, if available
+        question_text = example.get("question", [""])[0]  # Extract the first   question if it's a list
+        choices = example.get("choices", [[]])[0]  # Extract the first set of   choices
+        hint = example.get("hint", None)  # Get the hint, if available
+
+        # Ensure `hint` is valid and non-empty
+        if isinstance(hint, list) and len(hint) > 0:
+            hint = hint[0]
+        else:
+            hint = ""  # Default to an empty string if no valid hint is present
 
         # Build the question text
         formatted_question = f"Question: {question_text}\n\n"
@@ -80,23 +81,15 @@ class VQA2DataCollator:
         if hint:
             formatted_question += f"\nHint: {hint}\n"
 
-        formatted_question += "\nPlease answer directly with only the letter of the correct option."
+        formatted_question += "\nPlease answer directly with only the letter of the     correct option."
         return formatted_question
 
     def __call__(self, examples):
         assert len(examples) == 1, 'Batch size must be 1 for Phi-3-V models'
-        # print(examples)
+        #print(examples[0])
         images = [example["image"] for example in examples]
         questions = self._format_question(examples[0])
-        # answer = examples["multiple_choice_answer"]
-        choices = examples[0].get("choices", [[]])
-
-        if not choices:
-            raise ValueError("No choices found in the example.")
-        else:
-            print("Choice answer is ", examples[0]["answer"], flush=True)
-            answer_idx = int(examples[0].get("answer", 0))
-
+        answer = examples[0]["answer"]
 
 
         prompt_message = {
@@ -106,10 +99,10 @@ class VQA2DataCollator:
         prompt = self.processor.tokenizer.apply_chat_template(
             [prompt_message], tokenize=False, add_generation_prompt=True
         )
-        print(examples, flush=True)
-        answer = chr(choices[answer_idx])
+        answer = chr(ord('A') + int(examples[0]["answer"]))
 
-        batch = self.processor(prompt, [images], return_tensors="pt", padding=True, truncation=True)
+
+        batch = self.processor(prompt, images, return_tensors="pt", padding=True, truncation=True)
         prompt_input_ids = batch['input_ids']
         answer_input_ids = self.processor.tokenizer(
             answer, add_special_tokens=False, return_tensors='pt'
@@ -183,16 +176,20 @@ class VQA_v2_Evaluator:
 
         self.total_processing_time += time_end - time_start
         self.num_processed += 1
-
-        print("model size is ", self.model.get_memory_footprint(), flush=True)
         
         return generated_texts
     
     def _format_question(self, example):
         """Format question with choices and additional context."""
-        question_text = example.get("question", [""])[0]  # Extract the first question if it's a list
-        choices = example.get("choices", [[]])[0]  # Extract the first set of choices
-        hint = example.get("hint", [""])[0]  # Use the first hint, if available
+        question_text = example.get("question", [""])[0]  # Extract the first   question if it's a list
+        choices = example.get("choices", [[]])[0]  # Extract the first set of   choices
+        hint = example.get("hint", None)  # Get the hint, if available
+
+        # Ensure `hint` is valid and non-empty
+        if isinstance(hint, list) and len(hint) > 0:
+            hint = hint[0]
+        else:
+            hint = ""  # Default to an empty string if no valid hint is present
 
         # Build the question text
         formatted_question = f"Question: {question_text}\n\n"
@@ -204,16 +201,16 @@ class VQA_v2_Evaluator:
         if hint:
             formatted_question += f"\nHint: {hint}\n"
 
-        formatted_question += "\nPlease answer directly with only the letter of the correct option."
+        formatted_question += "\nPlease answer directly with only the letter of the     correct option."
         return formatted_question
     def evaluate(self):
         print("Evaluating model on test dataset...")
         for example in tqdm(self.test_dataset):
             images = [example["image"]]
             questions = [self._format_question(example)]
-            self.answers_unique.extend(chr(ord('A') + int(example["answer"][0])))
+            self.answers_unique.append(chr(ord('A') + int(example["answer"][0])))
             generated_text = self.process_image_queries(images, questions)
-            self.generated_texts_unique.extend(generated_text)
+            self.generated_texts_unique.append(generated_text)
 
     def results(self):
         self.generated_texts_unique = [g.strip().strip(".") for g in self.generated_texts_unique]
@@ -230,7 +227,7 @@ class VQA_v2_Evaluator:
 # Main function
 def main():
     model_name = "microsoft/Phi-3.5-vision-instruct"
-    output_dir = os.path.join(os.getcwd(), "vqa2_phi3")
+    output_dir = os.path.join(os.getcwd(), "Science_phi3")
     cache_dir = setup_cache_dir()
 
     # Load and split dataset
@@ -245,12 +242,11 @@ def main():
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         cache_dir=cache_dir,
-        _attn_implementation='eager',
     ).to("cuda")
 
     # Define training arguments
     training_args = TrainingArguments(
-        num_train_epochs=3,
+        num_train_epochs=1,
         per_device_train_batch_size=1,
         gradient_checkpointing=True,
         optim='adamw_torch',
