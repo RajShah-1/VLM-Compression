@@ -204,7 +204,7 @@ def get_model_size(model):
 def main():
     model_name = "Qwen/Qwen2-VL-2B-Instruct"
     cache_dir = setup_cache_dir()
-    output_dir = os.path.join(os.getcwd(), "qwen2_low_rank")
+    output_dir = os.path.join(os.getcwd(), "qwen2_low_rank-0.5")
 
     from model.qwen2 import Qwen2VL, CustomQwen2VL
     from low_rank import patch_model_using_metadata, save_metadata, get_metadata, replace_linear_with_low_rank
@@ -221,7 +221,7 @@ def main():
     print("Original model size:", get_model_size(model))
     model = replace_linear_with_low_rank(
         model, 
-        retained_variance=0.80,
+        retained_variance=0.50,
         skip_patterns=get_skip_layers()
     )
     print("Compressed model size:", get_model_size(model))

@@ -98,7 +98,7 @@ def replace_linear_with_low_rank(model, retained_variance, skip_patterns=None):
     """
     if skip_patterns is None:
         skip_patterns = []
-        
+
     replacements = 0
     total_params_before = 0
     total_params_after = 0
@@ -198,8 +198,9 @@ def patch_model_using_metadata(model, metadata, pt_model_path=None):
             setattr(parent_module, components[-1], low_rank_layer)
 
     if pt_model_path is not None:
-        state_dict = torch.load(pt_model_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
+        loc = "cuda" if torch.cuda.is_available() else "cpu"
+        state_dict = torch.load(pt_model_path, map_location=loc)
         model.load_state_dict(state_dict)
-        print('Loaded model weight')
+        print('Loaded model weight on ' + loc)
 
     return model
