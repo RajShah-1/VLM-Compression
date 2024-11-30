@@ -105,6 +105,7 @@ def evaluate_model(model, processor, eval_dataset, output_dir):
     answers = []
     bertscore = load("bertscore")  # Load the BERTScore metric
     start_time = time.time()  # Start timer for evaluation
+    print("The model size is ", model.get_memory_footprint())
     for example in eval_dataset:
         image = example['image']
         question = example['query']['en']
@@ -191,6 +192,7 @@ def main():
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         cache_dir=cache_dir,
+        _attn_implementation='eager',    
     ).to("cuda")
 
     # Prune the model

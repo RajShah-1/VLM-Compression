@@ -46,7 +46,8 @@ class VQA2DataCollator:
 
     def __call__(self, examples):
         assert len(examples) == 1, 'Batch size must be 1 for Phi-3-V models'
-        images = [example["image"] for example in examples]
+        examples = examples[0]
+        images = examples["image"]
         questions = examples["question"]
         answers = examples["multiple_choice_answer"]
 
@@ -58,7 +59,7 @@ class VQA2DataCollator:
         prompt = self.processor.tokenizer.apply_chat_template(
             [prompt_message], tokenize=False, add_generation_prompt=True
         )
-        answer = f'{answer}<|end|>\n<|endoftext|>'
+        answer = f'{answers}<|end|>\n<|endoftext|>'
 
 
         batch = self.processor(prompt, [images], return_tensors="pt", padding=True, truncation=True)
@@ -98,20 +99,20 @@ class VQA_v2_Evaluator:
 
         time_start = time.time()
 
-        images = images[0][0]
+        # print(images,queries)
+
+
+        images = images[0]
         
         texts = []
         placeholder = f"<|image_1|>\n"
         for idx, q in enumerate(queries):
             if idx > 0:
                 print("Multiple Queries not supported")
-            print(q["en"])
-            if type(q["en"]) == list:
-                q["en"] = q["en"][0]
             messages = [
             {   
                 "role": "user", 
-                "content": "Answer briefly." + placeholder+ " " + q["en"]},
+                "content": "Answer briefly." + placeholder+ " " + q},
             ]
 
         prompt = self.processor.tokenizer.apply_chat_template(
@@ -131,22 +132,21 @@ class VQA_v2_Evaluator:
         generated_ids = self.model.generate(**inputs, eos_token_id=self.processor.tokenizer.eos_token_id, **generation_args)
 
         generated_texts = self.processor.batch_decode(generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True)
-        time_end = time.time()
 
-        self.total_processing_time += time_end - time_start
-        self.num_processed += 1
-        
         return generated_texts
     def evaluate(self):
         print("Evaluating model on test dataset...")
+        print("The model size is ", self.model.get_memory_footprint())
         for example in tqdm(self.test_dataset):
             images = [example["image"]]
             question = [example["question"]]
             self.answers_unique.append(example["multiple_choice_answer"])
             generated_text = self.process_image_queries(images, question)
-            self.generated_texts_unique.append(generated_text)
+            self.generated_texts_unique.extend(generated_text)
 
     def results(self):
+        print(len(self.generated_texts_unique))
+        print(len(self.answers_unique))
         self.generated_texts_unique = [g.strip().strip(".") for g in self.generated_texts_unique]
 
         # Calculate BERTScore
@@ -172,10 +172,11 @@ def main():
     # Load processor and model
     processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, cache_dir=cache_dir)
     model = AutoModelForCausalLM.from_pretrained(
-        model_name,
+        output_dir,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         cache_dir=cache_dir,
+        _attn_implementation='eager',    
     ).to("cuda")
 
     # Define training arguments
@@ -217,7 +218,6 @@ def main():
 
     # Save model and processor
     model.save_pretrained(output_dir, safe_serialization=False, max_shard_size="500MB", device_map="auto")
-    processor.save_pretrained(output_dir)
 
     # Evaluate
     evaluator = VQA_v2_Evaluator(model, processor, test_dataset)
