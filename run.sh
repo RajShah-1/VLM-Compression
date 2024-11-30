@@ -25,11 +25,7 @@ PID_FILE="$LOG_DIR/out.pid.$SCRIPT_NAME.pid"
 # Activate Conda environment
 # conda activate bda-project-py38
 
-# Run the Python script, log to file and stdout, and write PID to a file
-{
-  echo "Running $1 with PID $$"
-  python "$1" 2>&1
-} | tee "$LOG_FILE"
+nohup python "$1" 2>&1 >$LOG_FILE &
 
 # Save the process ID to the PID file
 echo $! > "$PID_FILE"
