@@ -282,8 +282,16 @@ def main():
     print(f"Fine-tuning completed in {fine_tuning_time:.2f} seconds.")
 
     # Save model and processor
-    model.save_pretrained(output_dir, safe_serialization=False, max_shard_size="500MB", device_map="auto")
+    print("Saving model...")
+    model.save_pretrained(output_dir, safe_serialization=False,     max_shard_size="500MB", device_map="auto")
+    print("Model saved successfully.")
+
+    print("Saving processor...")
+    # Ensure `chat_template` attribute is defined before saving
+    if not hasattr(processor, 'chat_template'):
+        processor.chat_template = None
     processor.save_pretrained(output_dir)
+    print(f"Processor saved successfully to {output_dir}.")
 
     # Evaluate
     evaluator = VQA_v2_Evaluator(model, processor, test_dataset)
