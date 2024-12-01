@@ -9,6 +9,7 @@ from qwen_vl_utils import process_vision_info
 from model.utils import setup_cache_dir
 
 import random
+import time
 import json
 
 def get_skip_layers():
@@ -214,10 +215,17 @@ def get_model_size(model):
     size_all_mb = (param_size + buffer_size) / 1024 ** 2
     return size_all_mb
 
-def main():
-    model_name = "Qwen/Qwen2-VL-2B-Instruct"
-    cache_dir = setup_cache_dir()
-    output_dir = os.path.join(os.getcwd(), "qwen2_low_rank-0.5_vqa2")
+def main(retained_var):
+    print('#####', retained_var)
+    dir_name = None
+    if retained_var == 'prune':
+        dir_name = 'pruned'
+    else if retained_var == 'baseline':
+        dir_name = 'baseline'
+    else:
+        dir_name = 'low_rank_' + str(retained_var)
+
+    output_dir = os.path.join(os.getcwd(), f"models/qwen2_{dir_name}_vqa2")
     os.makedirs(output_dir, exist_ok=True)
 
     from model.qwen2 import Qwen2VL, CustomQwen2VL
@@ -226,18 +234,27 @@ def main():
     qwen2 = Qwen2VL(quantization_mode=None)
     model, tokenizer, processor = qwen2.model, qwen2.tokenizer, qwen2.processor
 
-    # Prune the model
     num_layers = len(model.model.layers)  # Total number of layers
     print(f"Original number of layers: {num_layers}")
 
-    # Actual pruning code would come here
+    # Actual pruning/low-rank code would come here
     # ===
     print("Original model size:", get_model_size(model))
-    model = replace_linear_with_low_rank(
-        model, 
-        retained_variance=0.50,
-        skip_patterns=get_skip_layers()
-    )
+    if retained_var == 'prune':
+        num_layers = len(model.model.layers)  # Total number of layers
+        keep_layers = list(range(0, num_layers, 2))  # Keep every alternate layer
+        print(f"Original number of layers: {num_layers}")
+        model = prune_model_layers(model, keep_layers)
+        print(f"Pruned number of layers: {len(model.model.layers)}")
+    if retained_var == 'baseline':
+        model = model
+    else:
+        model = replace_linear_with_low_rank(
+            model, 
+            retained_variance=retained_var,
+            skip_patterns=get_skip_layers()
+        )
+    
     print("Compressed model size:", get_model_size(model))
 
     metadata_json = os.path.join(output_dir, "metadata.json")
@@ -308,8 +325,10 @@ def main():
 
     # Fine-tune the model
     print("\nStarting fine-tuning...\n")
+    start = time.time()
     trainer.train(resume_from_checkpoint=latest_checkpoint)
-    print("\nFine-tuning completed.")
+    duration = time.time() - start
+    print("\nFine-tuning completed. Time: ", duration)
 
 
     print("Saving model with device_map='auto' for offloading...")
@@ -327,8 +346,14 @@ def main():
     pytorch_model_path = os.path.join(output_dir, "pytorch_model.pt")
     torch.save(model.state_dict(), pytorch_model_path)
 
-    custom_model = CustomQwen2VL(None, model, tokenizer, processor)
+    custom_model = CustomQwen2VL(None, model, tokenizer, processor, f'{dir_name}_vqa2')
+    # metadata = os.path.join(output_dir, 'metadata.json')
+    # weights = os.path.join(output_dir, 'pytorch_model.pt')
+    # custom_model = CustomQwen2VL.from_low_rank_path(metadata, weights)
     evaluate_model(custom_model, eval_dataset)
 
 if __name__ == "__main__":
-    main()
+    configs = [0.8, 0.5, 'prune', 'baseline']
+    # configs = ['baseline']
+    for config in configs:
+        main(config)
