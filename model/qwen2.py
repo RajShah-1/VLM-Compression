@@ -184,8 +184,6 @@ class Qwen2VL(Model):
         )
         inputs = inputs.to("cuda")
 
-        self.model.to('cuda')
-
         generated_ids = self.model.generate(**inputs, max_new_tokens=128)
         generated_ids_trimmed = [
             out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
@@ -210,6 +208,11 @@ class CustomQwen2VL(Qwen2VL):
         self.tokenizer = tokenizer
         self.processor = processor
 
+        # Ensure that the model is loaded on the GPU
+        # When we patch the model with LowRankModule, it is loaded on CPU,
+        # which would trip the inference process.
+        self.model.to('cuda')
+
         if quantization_mode is not None:
             print('WARNING: CustomQwen2VL ignores the quantization mode. Passed value: ' + str(quantization_mode))
 
@@ -221,9 +224,6 @@ class CustomQwen2VL(Qwen2VL):
             trust_remote_code=True
         )
         processor = AutoProcessor.from_pretrained(QWEN2_MODEL_NAME)
-
-        from low_rank.low_rank import LowRankLinear
-        from low_rank.low_rank import replace_linear_with_low_rank
 
         cache_dir = setup_cache_dir()
         config = Qwen2VLConfig.from_pretrained(
