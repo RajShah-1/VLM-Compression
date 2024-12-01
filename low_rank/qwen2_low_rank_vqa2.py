@@ -220,7 +220,7 @@ def main(retained_var):
     dir_name = None
     if retained_var == 'prune':
         dir_name = 'pruned'
-    else if retained_var == 'baseline':
+    elif retained_var == 'baseline':
         dir_name = 'baseline'
     else:
         dir_name = 'low_rank_' + str(retained_var)
