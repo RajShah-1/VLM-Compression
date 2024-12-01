@@ -83,6 +83,94 @@ def load_and_split_docvqa():
     test_dataset = dataset.select(range(TRAIN_SIZE, len(dataset)))
 
     return DatasetDict({"train": train_dataset, "test": test_dataset})
+
+#datacollator for docvqa
+class MiniDocVQADataCollator:
+    def __init__(self, processor):
+        self.processor = processor
+
+    def __call__(self, examples):
+        assert len(examples) == 1, 'Batch size must be 1 for Phi-3-V models'
+        example = examples[0]
+
+        image = example['image']
+        question = example['query']['en']
+        answer = random.choice(example['answers'])
+        prompt_message = {
+            'role': 'user',
+            'content': f'<|image_1|>\n{question}\nAnswer briefly.',
+        }
+
+        prompt = self.processor.tokenizer.apply_chat_template(
+            [prompt_message], tokenize=False, add_generation_prompt=True
+        )
+        answer = f'{answer}<|end|>\n<|endoftext|>'
+
+        # Process input and labels
+        batch = self.processor(prompt, [image], return_tensors='pt')
+        prompt_input_ids = batch['input_ids']
+        answer_input_ids = self.processor.tokenizer(
+            answer, add_special_tokens=False, return_tensors='pt'
+        )['input_ids']
+        input_ids = torch.cat([prompt_input_ids, answer_input_ids], dim=1)
+
+        ignore_index = -100
+        labels = torch.cat(
+            [
+                torch.tensor([ignore_index] * len(prompt_input_ids[0])).unsqueeze(0),
+                answer_input_ids,
+            ],
+            dim=1,
+        )
+
+        batch['input_ids'] = input_ids
+        del batch['attention_mask']
+        batch['labels'] = labels
+        return batch
+
+# Custom Data Collator for VQA v2
+class VQA2DataCollator:
+    def __init__(self, processor):
+        self.processor = processor
+
+    def __call__(self, examples):
+        assert len(examples) == 1, 'Batch size must be 1 for Phi-3-V models'
+        images = [example["image"] for example in examples]
+        questions = examples["question"]
+        answer = examples["multiple_choice_answer"]
+
+
+        prompt_message = {
+            'role': 'user',
+            'content': f'<|image_1|>\n{questions[0]}\nAnswer briefly.',
+        }
+        prompt = self.processor.tokenizer.apply_chat_template(
+            [prompt_message], tokenize=False, add_generation_prompt=True
+        )
+        answer = f'{answer}<|end|>\n<|endoftext|>'
+
+
+        batch = self.processor(prompt, [images], return_tensors="pt", padding=True, truncation=True)
+        prompt_input_ids = batch['input_ids']
+        answer_input_ids = self.processor.tokenizer(
+            answer, add_special_tokens=False, return_tensors='pt'
+        )['input_ids']
+        input_ids = torch.cat([prompt_input_ids, answer_input_ids], dim=1)
+        # Set ignore index for prompts
+        ignore_index = -100
+        labels = torch.cat(
+            [
+                torch.tensor([ignore_index] * len(prompt_input_ids[0])).unsqueeze(0),
+                answer_input_ids,
+            ],
+            dim=1,
+        )
+
+        batch['input_ids'] = input_ids
+        del batch['attention_mask']
+        batch['labels'] = labels
+        return batch
+
 # Custom Data Collator for ScienceQA
 class ScienceQACollator:
     def __init__(self, processor):
