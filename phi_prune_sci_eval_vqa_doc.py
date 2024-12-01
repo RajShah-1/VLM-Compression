@@ -485,7 +485,7 @@ def main():
     processor.save_pretrained(output_dir)
 
     # Evaluate
-    evaluator = DocVQAEvaluator(model, processor,docvqa_test_datasets)
+    evaluator = VQA_v2_Evaluator(model, processor,vqa2_test_dataset)
     start_time = time.time()
     evaluator.evaluate()
     evaluation_time = time.time() - start_time
