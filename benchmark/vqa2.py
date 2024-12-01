@@ -14,7 +14,7 @@ from benchmark.utils import average_normalized_levenshtein_similarity, average_b
 import os
 
 class VQA_v2(Benchmark):
-    def __init__(self, model : Model, data: None):
+    def __init__(self, model : Model, data=None):
         self.model = model
         self.processor = model.get_processor()
         self.model_type = self.model.get_model_name()
