@@ -30,8 +30,6 @@ if __name__ == "__main__":
     print("Running video inference demo")
     parser = argparse.ArgumentParser()
     parser.add_argument("--quantization_mode", type=int, default=16, help="Quantization mode for the model.")
-    parser.add_argument("--batch_size", type=int, default=1, help="Batch size for evaluation.")
-    parser.add_argument("--benchmark_name", type=str, default="docvqa", help="Benchmark name to run (e.g., scienceqa, vqa2).")
     parser.add_argument("--model_name", type=str, default="HuggingFaceM4/idefics2-8b", help="Model name to evaluate.")
     parser.add_argument("--video_path", type=str, default="demo_video/sample_demo_1.mp4", help="Path to the video file")
 
