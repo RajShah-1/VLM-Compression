@@ -27,7 +27,7 @@ class DocVQA_DEMO(Benchmark):
 
         self.answers_unique = []
         self.generated_texts_unique = []
-        self.output_file = "docvqa_output.txt"  # File to save the output
+        self.output_file = f"example_outputs/docvqa_output_{self.model.get_model_name()}.txt"  # File to save the output
 
     def evaluate(self):
         EVAL_BATCH_SIZE = 1
@@ -45,11 +45,12 @@ class DocVQA_DEMO(Benchmark):
                 print(f"Expected Answer: {examples['answers'][0]}", file=f)
 
                 img = images[0][0]
-                img_path = f"docvqa_image_{i + 1}.png"
+                img_path = f"example_outputs/docvqa/docvqa_image_{i + 1}.png"
                 img.save(img_path)
                 print(f"Image saved as {img_path}")
 
                 output = self.model.process_image_queries(images, queries)
+                print("Model Output is:", output[0], flush=True)
                 print(f"Model Output: {output[0]}", file=f)
                 print("-" * 50, file=f)
 

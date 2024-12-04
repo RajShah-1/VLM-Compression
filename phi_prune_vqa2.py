@@ -172,7 +172,7 @@ def main():
     # Load processor and model
     processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, cache_dir=cache_dir)
     model = AutoModelForCausalLM.from_pretrained(
-        output_dir,
+        model_name,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         cache_dir=cache_dir,
@@ -228,7 +228,7 @@ def main():
 
     # Results
     evaluator.results()
-    print(f"Fine-tuning time: {fine_tuning_time:.2f} seconds, Evaluation time: {evaluation_time:.2f} seconds.")
+    # print(f"Fine-tuning time: {fine_tuning_time:.2f} seconds, Evaluation time: {evaluation_time:.2f} seconds.")
 
 
 if __name__ == "__main__":

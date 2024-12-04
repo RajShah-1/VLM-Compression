@@ -139,20 +139,17 @@ class VQA_v2_Evaluator:
 
         time_start = time.time()
 
-        images = images[0][0]
+        images = images[0]
         
         texts = []
         placeholder = f"<|image_1|>\n"
         for idx, q in enumerate(queries):
             if idx > 0:
                 print("Multiple Queries not supported")
-            print(q["en"])
-            if type(q["en"]) == list:
-                q["en"] = q["en"][0]
             messages = [
             {   
                 "role": "user", 
-                "content": "Answer in one word." + placeholder+ " " + q["en"]},
+                "content": "Answer in one word." + placeholder+ " " + q},
             ]
 
         prompt = self.processor.tokenizer.apply_chat_template(
@@ -162,7 +159,7 @@ class VQA_v2_Evaluator:
         )
         inputs = self.processor(prompt, images, return_tensors="pt").to("cuda:0") 
         generation_args = { 
-            "max_new_tokens": 128, 
+            "max_new_tokens": 512, 
             "temperature": 0.0, 
             "do_sample": False, 
         } 
@@ -174,13 +171,12 @@ class VQA_v2_Evaluator:
         generated_texts = self.processor.batch_decode(generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True)
         time_end = time.time()
 
-        self.total_processing_time += time_end - time_start
-        self.num_processed += 1
         
         return generated_texts
     
     def _format_question(self, example):
         """Format question with choices and additional context."""
+        print(example)
         question_text = example.get("question", [""])[0]  # Extract the first   question if it's a list
         choices = example.get("choices", [[]])[0]  # Extract the first set of   choices
         hint = example.get("hint", None)  # Get the hint, if available
@@ -208,9 +204,9 @@ class VQA_v2_Evaluator:
         for example in tqdm(self.test_dataset):
             images = [example["image"]]
             questions = [self._format_question(example)]
-            self.answers_unique.append(chr(ord('A') + int(example["answer"][0])))
+            self.answers_unique.append(chr(ord('A') + int(example["answer"])))
             generated_text = self.process_image_queries(images, questions)
-            self.generated_texts_unique.append(generated_text)
+            self.generated_texts_unique.extend(generated_text)
 
     def results(self):
         self.generated_texts_unique = [g.strip().strip(".") for g in self.generated_texts_unique]
@@ -227,7 +223,7 @@ class VQA_v2_Evaluator:
 # Main function
 def main():
     model_name = "microsoft/Phi-3.5-vision-instruct"
-    output_dir = os.path.join(os.getcwd(), "Science_phi3")
+    output_dir = os.path.join(os.getcwd(), "phi3_pruned")
     cache_dir = setup_cache_dir()
 
     # Load and split dataset
@@ -238,60 +234,57 @@ def main():
     # Load processor and model
     processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, cache_dir=cache_dir)
     model = AutoModelForCausalLM.from_pretrained(
-        model_name,
+        output_dir,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         cache_dir=cache_dir,
+        _attn_implementation="eager",
     ).to("cuda")
 
     # Define training arguments
-    training_args = TrainingArguments(
-        num_train_epochs=1,
-        per_device_train_batch_size=1,
-        gradient_checkpointing=True,
-        optim='adamw_torch',
-        learning_rate=4e-5,
-        weight_decay=0.01,
-        max_grad_norm=1.0,
-        lr_scheduler_type='linear',
-        warmup_steps=50,
-        logging_steps=10,
-        output_dir=output_dir,
-        bf16=True,
-        remove_unused_columns=False,
-        dataloader_num_workers=4,
-        dataloader_prefetch_factor=2,
-        save_strategy="no",
-    )
+    # training_args = TrainingArguments(
+    #     num_train_epochs=3,
+    #     per_device_train_batch_size=1,
+    #     gradient_checkpointing=True,
+    #     optim='adamw_torch',
+    #     learning_rate=4e-5,
+    #     weight_decay=0.01,
+    #     max_grad_norm=1.0,
+    #     lr_scheduler_type='linear',
+    #     warmup_steps=50,
+    #     logging_steps=10,
+    #     output_dir=output_dir,
+    #     bf16=True,
+    #     remove_unused_columns=False,
+    #     dataloader_num_workers=4,
+    #     dataloader_prefetch_factor=2,
+    #     save_strategy="no",
+    # )
 
-    # Custom Data Collator
-    data_collator = VQA2DataCollator(processor)
+    # # Custom Data Collator
+    # data_collator = VQA2DataCollator(processor)
 
-    # Fine-tuning with Trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        data_collator=data_collator,
-        train_dataset=train_dataset,
-    )
+    # # Fine-tuning with Trainer
+    # trainer = Trainer(
+    #     model=model,
+    #     args=training_args,
+    #     data_collator=data_collator,
+    #     train_dataset=train_dataset,
+    # )
 
-    print("\nStarting fine-tuning...")
-    start_time = time.time()
-    trainer.train()
-    fine_tuning_time = time.time() - start_time
-    print(f"Fine-tuning completed in {fine_tuning_time:.2f} seconds.")
+    # print("\nStarting fine-tuning...")
+    # start_time = time.time()
+    # trainer.train()
+    # fine_tuning_time = time.time() - start_time
+    # print(f"Fine-tuning completed in {fine_tuning_time:.2f} seconds.")
 
-    # Save model and processor
-    print("Saving model...")
-    model.save_pretrained(output_dir, safe_serialization=False,     max_shard_size="500MB", device_map="auto")
-    print("Model saved successfully.")
-
-    print("Saving processor...")
-    # Ensure `chat_template` attribute is defined before saving
-    if not hasattr(processor, 'chat_template'):
-        processor.chat_template = None
-    processor.save_pretrained(output_dir)
-    print(f"Processor saved successfully to {output_dir}.")
+    # print("Saving model...")
+    # model.save_pretrained(output_dir, safe_serialization=False,     max_shard_size="500MB", device_map="auto")
+    # print("Model saved successfully.")
+    # print("Saving processor...")
+    # # Ensure `chat_template` attribute is defined before saving
+    # if not hasattr(processor, 'chat_template'):
+    #     processor.chat_template = None
 
     # Evaluate
     evaluator = VQA_v2_Evaluator(model, processor, test_dataset)
@@ -302,7 +295,7 @@ def main():
 
     # Results
     evaluator.results()
-    print(f"Fine-tuning time: {fine_tuning_time:.2f} seconds, Evaluation time: {evaluation_time:.2f} seconds.")
+    # print(f"Fine-tuning time: {fine_tuning_time:.2f} seconds, Evaluation time: {evaluation_time:.2f} seconds.")
 
 
 if __name__ == "__main__":

@@ -223,7 +223,7 @@ class VQA_v2_Evaluator:
 # Main function
 def main():
     model_name = "microsoft/Phi-3.5-vision-instruct"
-    output_dir = os.path.join(os.getcwd(), "vqa2_phi3")
+    output_dir = os.path.join(os.getcwd(), "phi3_pruned")
     cache_dir = setup_cache_dir()
 
     # Load and split dataset
@@ -234,7 +234,7 @@ def main():
     # Load processor and model
     processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, cache_dir=cache_dir)
     model = AutoModelForCausalLM.from_pretrained(
-        model_name,
+        output_dir,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
         cache_dir=cache_dir,

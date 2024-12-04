@@ -18,7 +18,7 @@ class ScienceQA_DEMO:
 
         self.answers_unique = []
         self.generated_texts_unique = []
-        self.output_file = "output_scienceqa_demo.txt"
+        self.output_file = f"example_outputs/output_scienceqa_demo_{self.model.get_model_name()}.txt"
 
     def evaluate(self):
         EVAL_BATCH_SIZE = 1
@@ -55,7 +55,7 @@ class ScienceQA_DEMO:
                 for idx, example in enumerate(valid_examples):
                     # Show the image
                     img = images[idx][0]
-                    img_path = f"science_image_{i + idx + 1}.png"
+                    img_path = f"example_outputs/sciencevqa/science_image_{i + idx + 1}.png"
                     img.save(img_path)
                     print(f"Image saved as {img_path}")
 

@@ -2,12 +2,13 @@ import os
 import cv2
 
 import numpy as np
+import torch.nn as nn
 
 
 def setup_cache_dir():
     """Setup local cache directories for model and data"""
     base_dir = os.environ.get('BDA_HOME', os.getcwd())
-    cache_dir = os.path.join(base_dir, 'model_cache')
+    cache_dir = os.path.join(base_dir, "model_cache")
     os.makedirs(cache_dir, exist_ok=True)
     
     # Set HuggingFace cache directory
@@ -79,3 +80,37 @@ def read_video_pyav(container, indices, save_path = None, save=False):
                 frame.to_image().save(f"{save_path}/frame_{saved_frame_no}.jpg")
                 saved_frame_no += 1
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+class LowRankLinear(nn.Module):
+    def __init__(self, in_features, out_features, rank):
+        super(LowRankLinear, self).__init__()
+        self.U = nn.Linear(in_features, rank, bias=False)
+        self.V = nn.Linear(rank, out_features, bias=False)
+import torch
+import torch.nn as nn
+
+class LowRankLinear(nn.Module):
+    def __init__(self, in_features, out_features, rank):
+        super(LowRankLinear, self).__init__()
+        self.U = nn.Linear(in_features, rank, bias=False).cuda()  # Projects to rank
+        self.V = nn.Linear(rank, out_features, bias=False).cuda()  # Projects to output features
+
+    @property
+    def weight(self):
+        # Combine U and V to mimic the original weight matrix
+        return torch.matmul(self.V.weight.data, self.U.weight.data).t().cuda()
+
+    def forward(self, x):
+        return self.V(self.U(x))
+
+class LowRankMLP(nn.Module):
+    def __init__(self, in_features, hidden_features, out_features, rank):
+        super(LowRankMLP, self).__init__()
+        self.fc1 = LowRankLinear(in_features, hidden_features, rank)
+        self.act = nn.GELU()  # Or other activation used in your model
+        self.fc2 = LowRankLinear(hidden_features, out_features, rank)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        return self.fc2(x)

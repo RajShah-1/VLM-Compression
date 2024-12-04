@@ -27,7 +27,7 @@ class VQA_v2_DEMO(Benchmark):
 
         self.answers_unique = []
         self.generated_texts_unique = []
-        self.output_file = "vqa2_output.txt"  # File to save the output
+        self.output_file = f"example_outputs/t_vqa2_output_{self.model.get_model_name()}.txt"  # File to save the output
 
     def evaluate(self):
         EVAL_BATCH_SIZE = 1
@@ -46,13 +46,13 @@ class VQA_v2_DEMO(Benchmark):
 
                 # Display the image
                 img = images[0][0]
-                img_path = f"vqa2_image_{i + 1}.png"
+                img_path = f"example_outputs/vqa2/vqa2_image_{i + 1}.png"
                 img.save(img_path)
                 print(f"Image saved as {img_path}")
 
                 # Run model inference
                 output = self.model.process_image_queries(images, queries)
-
+                print("Output is : ", output[0], flush=True)
                 # Save model output
                 f.write(f"Model Output: {output[0]}\n")
                 f.write("-" * 50 + "\n")

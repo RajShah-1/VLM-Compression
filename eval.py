@@ -2,6 +2,7 @@ from model.qwen2 import Qwen2VL
 from model.idefics2 import Idefics2
 from model.phi3 import Phi3_5
 from model.llava import VideoLLava
+from model.llavanext import LlavaNext
 
 # setup cli args
 import argparse
@@ -25,9 +26,8 @@ def main(args):
         model = Phi3_5(quantization_mode=args.quantization_mode)
     elif args.model_name == "LanguageBind/Video-LLaVA-7B-hf":
         model = VideoLLava(quantization_mode=args.quantization_mode)
-    elif args.model_name == "MAGAer13/mplug-owl-llama-7b-video":
-        from model.mplug import Mplug
-        model = Mplug(quantization_mode=args.quantization_mode)
+    elif args.model_name == "llava-hf/LLaVA-NeXT-Video-7B-hf":
+        model = LlavaNext(quantization_mode=args.quantization_mode)
     else:
         raise ValueError(f"Model {args.model_name} not supported")
 
@@ -55,18 +55,18 @@ def main(args):
         benchmark = Flickr30k(model)
     else:
         raise ValueError(f"Benchmark {args.benchmark_name} not supported")
-
+    print(f"{model.get_model_size()}")
     # Run the evaluation and display results
     benchmark.evaluate()
-    result = benchmark.results()
+    result, additional_results = benchmark.results()
 
-    print(f"Model: {model.get_model_name()}, Benchmark: {args.benchmark_name}, Accuracy: {result}")
+    print(f"Model: {model.get_model_name()}, Benchmark: {args.benchmark_name}, Accuracy: {result} with Additional Bert F1 is {additional_results}")
     now = datetime.now()
 
     formatted_timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
     # Save the results to a CSV file
-    df = pd.concat([df, pd.DataFrame([[formatted_timestamp, model.get_model_name(), args.benchmark_name, result, model.get_model_size(), model.get_average_processing_time() , ""]], columns=df.columns)], ignore_index=True)
+    df = pd.concat([df, pd.DataFrame([[formatted_timestamp, model.get_model_name(), args.benchmark_name, result, model.get_model_size(), model.get_average_processing_time() , additional_results]], columns=df.columns)], ignore_index=True)
     df.to_csv("results.csv", index=False)
 
 if __name__ == "__main__":

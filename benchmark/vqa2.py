@@ -14,15 +14,12 @@ from benchmark.utils import average_normalized_levenshtein_similarity, average_b
 import os
 
 class VQA_v2(Benchmark):
-    def __init__(self, model : Model, data=None):
+    def __init__(self, model : Model):
         self.model = model
         self.processor = model.get_processor()
         self.model_type = self.model.get_model_name()
         self.cache_dir = os.path.join(setup_cache_dir(), "datasets")
-        if data is None:
-            self.dataset = load_dataset("merve/vqav2-small", split="validation", cache_dir=self.cache_dir)
-        else:
-            self.dataset = data
+        self.dataset = load_dataset("merve/vqav2-small", split="validation", cache_dir=self.cache_dir)
         self.answers_unique = []
         self.generated_texts_unique = []
 
@@ -34,9 +31,6 @@ class VQA_v2(Benchmark):
             self.answers_unique.extend(examples["multiple_choice_answer"])
             images = [[im] for im in examples["image"]]
             queries = [{"en":examples["question"]}]
-            if len(images) <= 0:
-                print('Skipping due to no image', i)
-                continue
             print("Images inside is ", images, flush=True)
             
             output = self.model.process_image_queries(images, queries)

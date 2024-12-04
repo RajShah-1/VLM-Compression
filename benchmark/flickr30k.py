@@ -26,6 +26,7 @@ class Flickr30k(Benchmark):
         split_dataset = dataset.train_test_split(test_size=0.2, seed=42)
         train_dataset = split_dataset['train']
         self.dataset = split_dataset['test']
+        print("Dataset is of size", len(self.dataset), flush=True)
         self.dataset = self.dataset.remove_columns(['sentids', 'split', 'img_id', 'filename'])
         self.answers_unique = []
         self.generated_texts_unique = []
