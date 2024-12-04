@@ -42,6 +42,12 @@ Run the following command :
 
 ## Low-Rank Models
 
+- The module [low_rank.py](./low_rank/low_rank.py) contains the code for following:
+    - Replace `nn.Linear` layers with `LowRankLinear` layers. A `LowRankLinear` layer consists of two consecutive low-rank `nn.Linear` layers which approximate the original `nn.Linear`.
+    - This module also records the metadata of the linear layers being replaced. This could be stored in a JSON file, so that we could save and re-load the low-rank model whenever required.
+- The module [qwen2_low_rank.py](./low_rank/qwen2_low_rank.py) contains code for doing low rank factorization of QWen2-VL-2B Instruct model and finetuning it on Flickr30k dataset. The modules [qwen2_low_rank_vqa2.py](./low_rank/qwen2_low_rank_vqa2.py) and [qwen2_low_rank_docvqa.py](./low_rank/qwen2_low_rank_docvqa.py) contains the code for finetuning the low-rank model on VQA2 and DocVQA benchmarks respectively.
+    - These modules also support pruning of Qwen2-VL on the corresponding datasets. The parameter passed to the main function determines if we'll perform low-rank factorization for a specific retained variance ration or if we would do the pruning (as introduced in the previous section for Phi-3.5 models).
+
 
 ## Plotting
 
